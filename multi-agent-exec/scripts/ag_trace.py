@@ -69,9 +69,9 @@ def parse_codex_output(raw_output_path: str) -> dict:
 
 
 def log_to_langfuse(args, parsed: dict, prompt_content: str):
-    """Send trace to Langfuse."""
+    """Send trace to Langfuse (v3 SDK — OpenTelemetry-based)."""
     try:
-        from langfuse import Langfuse
+        from langfuse import get_client
     except ImportError:
         return  # silently skip if langfuse not installed
 
@@ -79,50 +79,59 @@ def log_to_langfuse(args, parsed: dict, prompt_content: str):
         return  # silently skip if not configured
 
     try:
-        lf = Langfuse()
+        lf = get_client()
 
         # Derive task_id from IPC dir structure: /tmp/ag_ipc/{task_id}/{role}/
         ipc_parts = args.ipc_dir.rstrip("/").split("/")
         task_id = ipc_parts[-2] if len(ipc_parts) >= 2 else "unknown"
 
-        trace = lf.trace(
+        # v3: context manager pattern — spans auto-end when exiting `with` block
+        with lf.start_as_current_span(
             name=f"multi-agent:{task_id}",
-            metadata={
-                "project": args.project,
-                "task_id": task_id,
-            },
-            tags=["multi-agent", args.executor, args.role],
-        )
+            input=prompt_content[:2000],
+        ):
+            # Set trace-level attributes (tags, metadata)
+            lf.update_current_trace(
+                tags=["multi-agent", args.executor, args.role],
+                metadata={
+                    "project": args.project,
+                    "task_id": task_id,
+                },
+            )
 
-        span = trace.span(
-            name=args.role,
-            input=prompt_content[:2000],  # truncate to save space
-            output=parsed.get("result_preview", ""),
-            metadata={
-                "executor": args.executor,
-                "role": args.role,
-                "duration_ms": args.duration_ms,
-                "cost_usd": parsed.get("cost_usd", 0),
-                "num_turns": parsed.get("num_turns", 0),
-                "input_tokens": parsed.get("input_tokens", 0),
-                "output_tokens": parsed.get("output_tokens", 0),
-                "status": parsed.get("status", "unknown"),
-            },
-        )
+            # Create child span for the executor role
+            with lf.start_as_current_span(
+                name=args.role,
+                input=prompt_content[:2000],
+                output=parsed.get("result_preview", ""),
+                metadata={
+                    "executor": args.executor,
+                    "role": args.role,
+                    "duration_ms": args.duration_ms,
+                    "cost_usd": parsed.get("cost_usd", 0),
+                    "num_turns": parsed.get("num_turns", 0),
+                    "input_tokens": parsed.get("input_tokens", 0),
+                    "output_tokens": parsed.get("output_tokens", 0),
+                    "status": parsed.get("status", "unknown"),
+                },
+            ):
+                trace_id = lf.get_current_trace_id()
 
-        # Update execution_record.json with trace URL
+        # Update execution_record.json with trace ID
         exec_record_path = os.path.join(args.ipc_dir, "execution_record.json")
-        if os.path.exists(exec_record_path):
+        if os.path.exists(exec_record_path) and trace_id:
             with open(exec_record_path) as f:
                 record = json.load(f)
-            record["langfuse_trace_id"] = trace.id
+            record["langfuse_trace_id"] = trace_id
             record.update({k: v for k, v in parsed.items() if k != "result_preview"})
             with open(exec_record_path, "w") as f:
                 json.dump(record, f, indent=2)
 
         lf.flush()
-    except Exception:
-        pass  # never fail
+    except Exception as e:
+        # Log error to stderr for debugging, but never block execution
+        import sys
+        print(f"[ag_trace] Langfuse error (non-fatal): {e}", file=sys.stderr)
 
 
 def main():

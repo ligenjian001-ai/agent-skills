@@ -88,18 +88,78 @@ tmux send-keys -t {conv_id}-{role} \
 #### AG polls from MAIN session (not blocked)
 
 ```bash
-# Primary: check for result.json
+# PRIMARY: Read live execution log (real-time, updated as executor runs)
+view_file /tmp/ag_ipc/{task_id}/{role}/live.log
+
+# Check for result.json (completion indicator)
 ls -la /tmp/ag_ipc/{task_id}/{role}/result.json
 
-# Secondary: check if executor modified files (early indicator)
+# Check if executor modified files (early indicator)
 git diff --stat
 
-# Tertiary: read executor pane for completion marker
+# Read executor pane for completion marker
 tmux capture-pane -t {conv_id}-{role} -p -S -20
 # Look for "EXEC_DONE"
 ```
 
 **Polling cadence**: 60s first check → 30s interval → 5min read errors → 10min timeout
+
+### Phase 2.5: Runtime Monitoring & Intervention (AG — MANDATORY)
+
+> [!IMPORTANT]
+> AG MUST actively monitor the executor's progress during execution.
+> Passive waiting is NOT acceptable. AG can and should intervene when needed.
+
+**Monitoring — what to check in `live.log`:**
+
+1. **Correct paths** — executor didn't "correct" or change paths from the prompt
+2. **Correct tools/commands** — SSH hops, python paths, etc. match the prompt
+3. **Progress** — executor making forward progress or stuck/looping?
+4. **Error patterns** — permission denied, file not found, connection refused
+
+**Monitoring cadence**: 30s first check → 60s interval → read `live.log` each time
+
+```bash
+# Read live output (non-blocking, uses view_file not tmux)
+view_file /tmp/ag_ipc/{task_id}/{role}/live.log
+```
+
+#### Intervention — AG CAN interrupt executors
+
+AG is not powerless during execution. Executors run in a dedicated tmux session:
+
+```bash
+# INTERRUPT: Send Ctrl+C to kill the executor process
+tmux send-keys -t {conv_id}-{role} C-c
+
+# VERIFY: Confirm executor stopped
+tmux capture-pane -t {conv_id}-{role} -p -S -5
+```
+
+#### When to intervene
+
+| Trigger | Action |
+| --- | --- |
+| **Wrong direction** — live.log shows executor using wrong paths, wrong SSH hop, or completely misunderstanding the task | Ctrl+C → write `feedback.json` → re-dispatch with corrected prompt |
+| **Stuck/looping** — no new output in live.log for 5+ minutes | Ctrl+C → diagnose → re-dispatch or notify user |
+| **Error cascade** — repeated failures (permission denied, connection refused) with no self-recovery | Ctrl+C → fix the underlying issue first → re-dispatch |
+| **Budget concern** — simple task running too long (>$2 for a routine check) | Ctrl+C → simplify prompt or use cheaper executor |
+
+#### When NOT to intervene
+
+- Executor is making progress but slower than expected → let it run
+- Executor tries a slightly different approach than prompted but it's working → let it run
+- Minor errors that executor self-recovers from → let it run
+
+#### Timeout policy
+
+| Executor | Default timeout | Action on timeout |
+| --- | --- | --- |
+| CC | 10 min | Ctrl+C → re-dispatch with tighter scope |
+| Gemini | 10 min | Ctrl+C → re-dispatch |
+| Codex | 5 min | Ctrl+C → re-dispatch |
+
+After intervention, **always** write `{role}/feedback.json` documenting why:
 
 ### Phase 3: Result Collection (AG)
 
@@ -124,6 +184,39 @@ If PASS → proceed to next role or complete
 ### Phase 5: Report to User
 
 AG summarizes all role outputs, verification results, costs, and final status.
+
+### Phase 6: Retrospective (AG — triggered on demand)
+
+> [!TIP]
+> Can be triggered anytime — after a task, periodically, or when user requests "复盘/reflect".
+> Uses Langfuse traces accumulated from past dispatches.
+
+```bash
+# Run retrospective (last 7 days, all executors)
+python3 /home/lgj/agent-skills/multi-agent-exec/scripts/ag_retro.py
+
+# Filter by executor or time range
+python3 /home/lgj/agent-skills/multi-agent-exec/scripts/ag_retro.py --days 3 --executor cc
+
+# JSON output for programmatic analysis
+python3 /home/lgj/agent-skills/multi-agent-exec/scripts/ag_retro.py --json
+```
+
+**What it analyzes:**
+
+- Failure patterns: recurring errors, wrong paths, prompt problems
+- Cost efficiency: avg cost per executor, per role
+- Executor selection: is the right executor being used for each role?
+- Duration trends: are tasks getting faster or slower?
+
+**Actions based on findings:**
+
+| Finding | Action |
+| --- | --- |
+| High failure rate for an executor | Review prompt templates, add more constraints |
+| Repeated path/env errors | Update relevant skill (e.g. trading-server) |
+| Cost spikes | Tighten budget or switch to cheaper executor |
+| Same role dispatched repeatedly | Consider automating as Jenkins job |
 
 ## Tracing & Recording
 
@@ -170,10 +263,11 @@ tmux kill-session -t {id}; sleep 1; tmux new-session -d -s {id} -x 200 -y 50
 
 ## IPC Protocol
 
-```
+```text
 /tmp/ag_ipc/{task_id}/
 ├── {role}/
 │   ├── prompt.txt           ← AG → Executor (task prompt)
+│   ├── live.log             ← Real-time executor output (tee'd by ag-dispatch)
 │   ├── result.json          ← Executor → AG (structured result)
 │   ├── raw_output.json      ← Executor stdout (captured by ag-dispatch)
 │   ├── execution_record.json← ag-dispatch metadata (cost, duration, trace ID)

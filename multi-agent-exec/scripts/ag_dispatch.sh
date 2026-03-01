@@ -30,6 +30,7 @@ done
 PROMPT_FILE="${IPC_DIR}/prompt.txt"
 RAW_OUTPUT="${IPC_DIR}/raw_output.json"
 EXEC_RECORD="${IPC_DIR}/execution_record.json"
+LIVE_LOG="${IPC_DIR}/live.log"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Validate
@@ -39,6 +40,8 @@ if [[ ! -f "$PROMPT_FILE" ]]; then
 fi
 
 echo "[ag-dispatch] executor=${EXECUTOR} role=${ROLE} project=${PROJECT_DIR}"
+echo "[ag-dispatch] live log: ${LIVE_LOG}"
+> "$LIVE_LOG"  # truncate live log
 START_TS=$(date +%s%N)
 
 # Dispatch based on executor type
@@ -49,18 +52,18 @@ case "$EXECUTOR" in
       --output-format json \
       --max-budget-usd "$BUDGET" \
       --permission-mode bypassPermissions \
-      2>&1 | tee "$RAW_OUTPUT"
+      2>&1 | tee "$RAW_OUTPUT" | tee -a "$LIVE_LOG"
     ;;
   gemini)
     cat "$PROMPT_FILE" | gemini -p "" \
       --output-format json \
       --approval-mode yolo \
-      2>&1 | tee "$RAW_OUTPUT"
+      2>&1 | tee "$RAW_OUTPUT" | tee -a "$LIVE_LOG"
     ;;
   codex)
     cat "$PROMPT_FILE" | codex exec \
       -c 'sandbox_permissions=["disk-full-read-access","disk-write"]' \
-      2>&1 | tee "$RAW_OUTPUT"
+      2>&1 | tee "$RAW_OUTPUT" | tee -a "$LIVE_LOG"
     ;;
   *)
     echo "ERROR: Unknown executor '${EXECUTOR}'. Use: cc, gemini, codex" >&2
