@@ -1,9 +1,36 @@
 ---
 name: multi-agent-exec
-description: "AG orchestrates CC/Codex/Gemini as implementation executors. Use for any task that benefits from multi-agent decomposition. AG handles planning, context engineering, task decomposition, and verification. Executors handle implementation. Cross-project — no project-specific paths."
+description: "DEPRECATED (2026-03-03) — 已迁移到 Claude Code 原生 Task subagent。本文件保留作为历史参考。"
 ---
 
-# Multi-Agent Execution Skill
+> **DEPRECATED**: 本 skill 基于 AG 平台的 tmux session + ag_dispatch.sh 编排方案，已于 2026-03-03 被 Claude Code 原生 Task subagent 机制替代。
+> Claude Code 中直接使用 `Task` 工具即可并行分发任务，无需 tmux session 隔离。
+> 本文件保留供参考，不再作为操作指南。
+
+---
+
+# Multi-Agent Execution Skill (ARCHIVED)
+
+> [!CAUTION]
+>
+> ## STOP — READ BEFORE ANY ACTION
+>
+> **You are the ORCHESTRATOR. You are NOT the executor.**
+>
+> If you matched this skill, you MUST:
+>
+> 1. Dispatch work to CC/Codex/Gemini via `ag_dispatch.sh`
+> 2. Monitor their execution via `live.log`
+> 3. Verify their results independently
+>
+> You MUST NOT:
+>
+> - Run `grep`, `ssh`, `python3`, or any analysis commands yourself
+> - Read source files to "investigate" the problem yourself
+> - Do the executor's job "because it's faster"
+>
+> **Self-check before EVERY tool call**: "Am I orchestrating, or am I executing?"
+> If you are executing → STOP → write a prompt.txt → dispatch via ag_dispatch.sh
 
 ## Core Principle: Dynamic Role Planning
 
