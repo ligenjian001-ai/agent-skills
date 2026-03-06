@@ -2,7 +2,7 @@
 # ag-dispatch: Transparent executor dispatch wrapper with tracing
 # Usage: ag-dispatch <executor> <role> <ipc_dir> [--budget N] [--project-dir DIR]
 #
-# Dispatches a task to an executor (cc/gemini/codex), captures output,
+# Dispatches a task to an executor (cc/gemini/codex/deepseek), captures output,
 # and logs execution metadata to Langfuse (async, non-blocking).
 #
 # The executor receives the prompt via stdin from <ipc_dir>/prompt.txt
@@ -65,8 +65,33 @@ case "$EXECUTOR" in
       -c 'sandbox_permissions=["disk-full-read-access","disk-write"]' \
       2>&1 | tee "$RAW_OUTPUT" | tee -a "$LIVE_LOG"
     ;;
+  deepseek)
+    # DeepSeek via API
+    if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+      echo "ERROR: DEEPSEEK_API_KEY not set" >&2
+      exit 1
+    fi
+    DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-deepseek-chat}"
+    DEEPSEEK_URL="${DEEPSEEK_API_URL:-https://api.deepseek.com/v1/chat/completions}"
+
+    PAYLOAD=$(python3 -c "
+import json, sys
+prompt = sys.stdin.read()
+print(json.dumps({
+    'model': '${DEEPSEEK_MODEL}',
+    'messages': [{'role': 'user', 'content': prompt}],
+    'stream': False,
+    'max_tokens': 8192
+}))
+" < "$PROMPT_FILE")
+
+    curl -s -X POST "$DEEPSEEK_URL" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer ${DEEPSEEK_API_KEY}" \
+      -d "$PAYLOAD" 2>&1 | tee "$RAW_OUTPUT" | tee -a "$LIVE_LOG"
+    ;;
   *)
-    echo "ERROR: Unknown executor '${EXECUTOR}'. Use: cc, gemini, codex" >&2
+    echo "ERROR: Unknown executor '${EXECUTOR}'. Use: cc, gemini, codex, deepseek" >&2
     exit 1
     ;;
 esac
@@ -101,4 +126,4 @@ if command -v python3 &>/dev/null && [[ -f "${SCRIPT_DIR}/ag_trace.py" ]]; then
   disown
 fi
 
-echo "EXEC_DONE"
+echo "TASK_DONE"

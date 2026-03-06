@@ -22,9 +22,9 @@ description: "Multi-agent panel discussion — CC, Codex, Gemini debate a topic 
 | 🟢 Optimist | CC (Claude) | Visionary | Identifies opportunities, thinks big, champions innovation |
 
 > [!NOTE]
-> All 3 agents run on CC (Claude) for maximum reliability. The personas are differentiated
-> by prompt, not by engine. The launch script still supports `gemini` and `codex` executors
-> if you want to experiment, with codex→gemini auto-fallback.
+> All 3 agents default to CC (Claude) for maximum reliability. The personas are differentiated
+> by prompt, not by engine. `panel_launch.sh` delegates to `task-delegate/task_launch.sh` internally
+> and supports all backends: `cc`, `gemini`, `codex`, `deepseek`. Codex has auto-fallback to Gemini.
 
 ## Workflow
 
@@ -95,9 +95,53 @@ Once all 3 are done, collect:
 bash ${SKILL_DIR}/scripts/panel_collect.sh ${TASK_DIR} 0
 ```
 
+### Phase 2.55: User Checkpoint（用户检查点）⭐ 新增
+
+> [!IMPORTANT]
+> **每轮收集后、资料搜索前，AG 必须暂停并询问用户是否参与 debate。**
+> 这是用户注入关键上下文、纠正事实错误、或补充 agents 遗漏信息的黄金窗口。
+
+**AG 执行步骤：**
+
+1. **快速罗列三方核心观点** — 用简洁的表格呈现，不要原文复制
+
+```markdown
+## 第 N 轮观点摘要
+
+| 维度 | 🔴 怀疑论者 | 🔵 务实工程师 | 🟢 乐观派 |
+|------|-----------|------------|----------|
+| 核心论点 | ... | ... | ... |
+| 主要风险 | ... | ... | ... |
+| 行动建议 | ... | ... | ... |
+| 搜索请求 | N 个 | N 个 | N 个 |
+
+关键分歧点：
+1. ...
+2. ...
+
+您是否要参与 debate？可以：
+- 纠正事实错误
+- 补充 agents 不知道的信息
+- 针对某个观点表达同意/反对
+- 跳过（直接进入资料搜索和下一轮）
+```
+
+1. **使用 `notify_user` 呈现摘要** — 设置 `BlockedOnUser=true`，等待用户响应
+
+2. **处理用户输入**（如果有）：
+   - 将用户的信息写入 `${TASK_DIR}/user_input_rN.md`
+   - 在下一轮的 prompt 中注入用户输入（和 research supplement 一起追加）
+   - 用户输入中的事实性信息用 `[USER]` 标签标注
+
+3. **用户跳过** → 直接进入 Phase 2.6 处理搜索请求
+
+> [!NOTE]
+> 用户在非最终轮都可以参与 checkpoint。最终轮（信心评分轮）结束后不需要 checkpoint，
+> 直接进入报告生成。
+
 ### Phase 2.6: 处理搜索请求 + URL 溯源 ⭐ 核心
 
-每轮收集后，AG 检查各 agent 输出中的 `### 📡 资料搜索请求` 部分。如果 agents 请求了额外数据：
+每轮收集后（且 User Checkpoint 完成后），AG 检查各 agent 输出中的 `### 📡 资料搜索请求` 部分。如果 agents 请求了额外数据：
 
 1. **提取请求** — 从每个 agent 的 output.md 中找 `[REQUEST]` 行
 2. **两步搜索**：
@@ -246,7 +290,8 @@ All agent templates include citation rules:
 | Script | Purpose |
 |--------|---------|
 | `panel_prepare.sh` | Auto-generate prompts from topic + templates + previous round |
-| `panel_launch.sh` | Launch one agent in a dedicated tmux session (with fallback) |
+| `panel_launch.sh` | Launch one agent (thin wrapper around `task-delegate/task_launch.sh`) |
+| `panel_extract_output.sh` | Post-run hook: extract output.md from live.log |
 | `panel_collect.sh` | Collect outputs and produce round summary |
 | `panel_report.sh` | Generate markdown report |
 | `panel_report_html.py` | Generate polished HTML report with references |

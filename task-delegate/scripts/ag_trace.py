@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ag_trace.py — Async Langfuse logger for multi-agent executor traces.
+ag_trace.py — Async Langfuse logger for task-delegate executor traces.
 
 Called by ag_dispatch.sh AFTER executor completes. Fire-and-forget.
 Failures are silently ignored — tracing never blocks execution.
@@ -40,7 +40,6 @@ def parse_gemini_output(raw_output_path: str) -> dict:
     try:
         with open(raw_output_path) as f:
             data = json.load(f)
-        # Gemini JSON format may differ — adapt as needed
         return {
             "cost_usd": data.get("total_cost_usd", 0),
             "duration_ms": data.get("duration_ms", 0),
@@ -68,6 +67,24 @@ def parse_codex_output(raw_output_path: str) -> dict:
         return {"status": "parse_failed"}
 
 
+def parse_deepseek_output(raw_output_path: str) -> dict:
+    """Parse DeepSeek API JSON response."""
+    try:
+        with open(raw_output_path) as f:
+            data = json.load(f)
+        usage = data.get("usage", {})
+        choices = data.get("choices", [])
+        content = choices[0]["message"]["content"] if choices else ""
+        return {
+            "input_tokens": usage.get("prompt_tokens", 0),
+            "output_tokens": usage.get("completion_tokens", 0),
+            "result_preview": content[:500],
+            "status": "completed",
+        }
+    except Exception:
+        return {"status": "parse_failed"}
+
+
 def log_to_langfuse(args, parsed: dict, prompt_content: str):
     """Send trace to Langfuse (v3 SDK — OpenTelemetry-based)."""
     try:
@@ -81,25 +98,23 @@ def log_to_langfuse(args, parsed: dict, prompt_content: str):
     try:
         lf = get_client()
 
-        # Derive task_id from IPC dir structure: /tmp/ag_ipc/{task_id}/{role}/
+        # Derive task_id from IPC dir structure
         ipc_parts = args.ipc_dir.rstrip("/").split("/")
         task_id = ipc_parts[-2] if len(ipc_parts) >= 2 else "unknown"
 
-        # v3: context manager pattern — spans auto-end when exiting `with` block
+        # v3: context manager pattern
         with lf.start_as_current_span(
-            name=f"multi-agent:{task_id}",
+            name=f"task-delegate:{task_id}",
             input=prompt_content[:2000],
         ):
-            # Set trace-level attributes (tags, metadata)
             lf.update_current_trace(
-                tags=["multi-agent", args.executor, args.role],
+                tags=["task-delegate", args.executor, args.role],
                 metadata={
                     "project": args.project,
                     "task_id": task_id,
                 },
             )
 
-            # Create child span for the executor role
             with lf.start_as_current_span(
                 name=args.role,
                 input=prompt_content[:2000],
@@ -129,14 +144,12 @@ def log_to_langfuse(args, parsed: dict, prompt_content: str):
 
         lf.flush()
     except Exception as e:
-        # Log error to stderr for debugging, but never block execution
-        import sys
         print(f"[ag_trace] Langfuse error (non-fatal): {e}", file=sys.stderr)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Log executor trace to Langfuse")
-    parser.add_argument("--executor", required=True, choices=["cc", "claude", "gemini", "codex"])
+    parser.add_argument("--executor", required=True, choices=["cc", "claude", "gemini", "codex", "deepseek"])
     parser.add_argument("--role", required=True)
     parser.add_argument("--ipc-dir", required=True)
     parser.add_argument("--project", required=True)
@@ -152,6 +165,7 @@ def main():
         "claude": parse_cc_output,
         "gemini": parse_gemini_output,
         "codex": parse_codex_output,
+        "deepseek": parse_deepseek_output,
     }
     parsed = parsers.get(args.executor, parse_codex_output)(raw_output)
 

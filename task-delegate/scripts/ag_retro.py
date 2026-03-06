@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-ag_retro.py — Multi-Agent Retrospective via Langfuse traces.
+ag_retro.py — Task Delegate Retrospective via Langfuse traces.
 
 Analyzes past executor traces to identify patterns, failures, and improvements.
 Can be triggered anytime by AG or user.
 
 Usage:
-  python3 ag_retro.py [--days N] [--executor cc|gemini|codex] [--limit N]
+  python3 ag_retro.py [--days N] [--executor cc|gemini|codex|deepseek] [--limit N]
 
 Output:
   Prints a structured retrospective report to stdout.
@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 
 def fetch_traces(days: int, executor: str | None, limit: int) -> list:
-    """Fetch multi-agent traces from Langfuse (v3 SDK)."""
+    """Fetch task-delegate traces from Langfuse (v3 SDK)."""
     try:
         from langfuse import get_client
     except ImportError:
@@ -35,9 +35,8 @@ def fetch_traces(days: int, executor: str | None, limit: int) -> list:
     lf = get_client()
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
-    # v3: use REST API wrapper to list traces
     traces_resp = lf.api.trace.list(
-        tags="multi-agent",
+        tags="task-delegate",
         limit=limit,
     )
 
@@ -46,7 +45,6 @@ def fetch_traces(days: int, executor: str | None, limit: int) -> list:
         if t.timestamp and t.timestamp < since:
             continue
 
-        # v3: get full trace detail (includes observations)
         try:
             detail = lf.api.trace.get(t.id)
             observations = detail.observations if hasattr(detail, "observations") and detail.observations else []
@@ -86,9 +84,8 @@ def analyze(traces: list) -> dict:
 
     total = len(traces)
     if total == 0:
-        return {"status": "no_data", "message": "No multi-agent traces found in the specified period."}
+        return {"status": "no_data", "message": "No task-delegate traces found in the specified period."}
 
-    # Aggregate stats
     executors = {}
     roles = {}
     failures = []
@@ -130,7 +127,6 @@ def analyze(traces: list) -> dict:
     # Identify patterns
     patterns = []
 
-    # Check for repeated failures
     if failures:
         patterns.append({
             "type": "failure_pattern",
@@ -139,7 +135,6 @@ def analyze(traces: list) -> dict:
             "recommendation": "Review failure inputs — are prompts clear enough? Are paths/env correct?",
         })
 
-    # Check for cost efficiency
     for ex, stats in executors.items():
         if stats["count"] > 0:
             avg_cost = stats["cost"] / stats["count"]
@@ -166,11 +161,11 @@ def analyze(traces: list) -> dict:
 def print_report(analysis: dict):
     """Print human-readable retrospective report."""
     if analysis["status"] == "no_data":
-        print("📊 No multi-agent traces found.")
+        print("📊 No task-delegate traces found.")
         return
 
     print("=" * 60)
-    print("📊 MULTI-AGENT RETROSPECTIVE REPORT")
+    print("📊 TASK-DELEGATE RETROSPECTIVE REPORT")
     print("=" * 60)
     print(f"Traces analyzed: {analysis['period_traces']}")
     print(f"Total cost: ${analysis['total_cost_usd']}")
@@ -207,9 +202,9 @@ def print_report(analysis: dict):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Multi-Agent Retrospective via Langfuse")
+    parser = argparse.ArgumentParser(description="Task Delegate Retrospective via Langfuse")
     parser.add_argument("--days", type=int, default=7, help="Analyze traces from last N days (default: 7)")
-    parser.add_argument("--executor", choices=["cc", "gemini", "codex"], help="Filter by executor")
+    parser.add_argument("--executor", choices=["cc", "gemini", "codex", "deepseek"], help="Filter by executor")
     parser.add_argument("--limit", type=int, default=50, help="Max traces to fetch (default: 50)")
     parser.add_argument("--json", action="store_true", help="Output JSON only (no human report)")
     args = parser.parse_args()

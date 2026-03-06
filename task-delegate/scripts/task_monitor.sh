@@ -1,25 +1,26 @@
 #!/bin/bash
-# cc_monitor.sh — Monitor Claude Code task status
+# task_monitor.sh — Monitor task-delegate task status
 #
 # Usage:
-#   cc_monitor.sh              # List all active CC tasks
-#   cc_monitor.sh <task_id>    # Show detailed status for one task
+#   task_monitor.sh              # List all tasks
+#   task_monitor.sh <task_id>    # Show detailed status for one task
 
 set -euo pipefail
 
-TASKS_DIR="/tmp/cc_tasks"
+TASKS_DIR="${HOME}/.task-delegate"
 
-# --- Color helpers (safe for terminal) ---
+# --- Color helpers ---
 BOLD="\033[1m"
 GREEN="\033[32m"
 YELLOW="\033[33m"
 RED="\033[31m"
 CYAN="\033[36m"
+DIM="\033[2m"
 RESET="\033[0m"
 
 # --- No args: list all tasks ---
 if [[ $# -eq 0 ]]; then
-  echo -e "${BOLD}📋 Claude Code Tasks${RESET}"
+  echo -e "${BOLD}📋 Task Delegate — All Tasks${RESET}"
   echo "═══════════════════════════════════════════════════════"
 
   if [[ ! -d "$TASKS_DIR" ]] || [[ -z "$(ls -A "$TASKS_DIR" 2>/dev/null)" ]]; then
@@ -27,13 +28,19 @@ if [[ $# -eq 0 ]]; then
     exit 0
   fi
 
-  printf "  %-35s %-12s %-12s %s\n" "TASK ID" "STATUS" "DURATION" "SESSION"
-  echo "  ─────────────────────────────────────────────────────"
+  printf "  %-35s %-10s %-12s %-12s %s\n" "TASK ID" "BACKEND" "STATUS" "DURATION" "SESSION"
+  echo "  ─────────────────────────────────────────────────────────────────────"
 
   for task_dir in "$TASKS_DIR"/*/; do
     [[ -d "$task_dir" ]] || continue
     task_id=$(basename "$task_dir")
-    session="cc-${task_id}"
+    session="task-${task_id}"
+
+    # Determine backend from execution_record
+    backend="?"
+    if [[ -f "${task_dir}/execution_record.json" ]]; then
+      backend=$(python3 -c "import json; print(json.load(open('${task_dir}/execution_record.json')).get('backend', '?'))" 2>/dev/null || echo "?")
+    fi
 
     # Check status
     if [[ -f "${task_dir}/execution_record.json" ]]; then
@@ -50,7 +57,7 @@ if [[ $# -eq 0 ]]; then
       # Calculate running time
       if [[ -f "${task_dir}/live.log" ]]; then
         start_line=$(head -5 "${task_dir}/live.log" | grep -oP '\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}' | head -1)
-        if [[ -n "$start_line" ]]; then
+        if [[ -n "${start_line:-}" ]]; then
           start_ts=$(date -d "$start_line" +%s 2>/dev/null || echo "0")
           now_ts=$(date +%s)
           elapsed_s=$((now_ts - start_ts))
@@ -71,18 +78,18 @@ if [[ $# -eq 0 ]]; then
       session_display="none"
     fi
 
-    printf "  %-35s %-25b %-12s %b\n" "$task_id" "$status_display" "$duration" "$session_display"
+    printf "  %-35s %-10s %-25b %-12s %b\n" "$task_id" "$backend" "$status_display" "$duration" "$session_display"
   done
 
   echo ""
-  echo "  Use: cc_monitor.sh <task_id>  for details"
+  echo "  Use: task_monitor.sh <task_id>  for details"
   exit 0
 fi
 
 # --- Single task detail ---
 TASK_ID="$1"
 TASK_DIR="${TASKS_DIR}/${TASK_ID}"
-SESSION="cc-${TASK_ID}"
+SESSION="task-${TASK_ID}"
 
 if [[ ! -d "$TASK_DIR" ]]; then
   echo "ERROR: Task not found: ${TASK_ID}" >&2
@@ -100,6 +107,7 @@ if [[ -f "${TASK_DIR}/execution_record.json" ]]; then
   python3 -c "
 import json
 r = json.load(open('${TASK_DIR}/execution_record.json'))
+print(f\"  Backend:  {r.get('backend', '?')}\")
 print(f\"  Result:   {r['status']}\")
 print(f\"  Duration: {r['duration_human']}\")
 print(f\"  Started:  {r.get('started_at', '?')}\")
