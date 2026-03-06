@@ -78,6 +78,7 @@ find ~/.gemini/antigravity/conversations -name "*.pb" -size +4M \
 ```
 
 > **IMPORTANT**: Before archiving, summarize conversation contents for user confirmation:
+>
 > ```bash
 > for f in $(find ~/.gemini/antigravity/conversations -name "*.pb" -size +4M -printf "%f\n"); do
 >   cid=${f%.pb}
@@ -125,6 +126,34 @@ mv ~/.gemini/antigravity/conversations_archive/<conversation_id>.pb \
 | Agent Manager | `streamAgentStateUpdates` has no exponential backoff | Orphan/failed conversations polled every ~2s indefinitely |
 | Renderer | Polling + artifact resolution errors saturate event loop | VERY LONG TASK blocks Webview message consumption |
 | Memory | Renderer processes leak over time (1GB+ after 18h) | GC pauses compound with above issues |
+
+## Anti-Patterns
+
+```
+❌ Only restarting AG IDE without archiving .pb files
+   → Polling storms WILL recur within hours. Archive >4MB files FIRST, then restart
+
+❌ Deleting .pb files instead of archiving them
+   → Move to conversations_archive/, don't delete. User may want to restore later
+
+❌ Diagnosing lag without checking ALL 5 steps
+   → Multiple causes are often active simultaneously. Run ALL diagnosis steps before fixing
+
+❌ Archiving .pb files without user confirmation
+   → ALWAYS show conversation summaries (task.md) and get user approval before moving files
+
+❌ Assuming lag is a network issue
+   → AG lag is almost always caused by local polling storms or oversized .pb files, not network
+
+❌ Running diagnosis on the remote workstation when logs are on macOS
+   → AG logs are in ~/Library/... on macOS, but .pb files are on the remote workstation. Check both
+```
+
+## Mandatory Rules
+
+1. **Confirm before archiving**: Always show conversation summaries before moving .pb files
+2. **Archive, don't delete**: Move .pb files to `conversations_archive/`, never `rm`
+3. **Restart after archive**: AG IDE must be restarted after archiving for changes to take effect
 
 ## Prevention
 

@@ -190,6 +190,32 @@ There are NO exceptions for "quick fixes".
 
 不会。每个 conversation 用不同的 tmux session ID（UUID 前 8 位）。不同 session 之间完全隔离。
 
+### Q10: 用户取消命令后 run_command 卡住怎么办？
+
+这是 AG 框架级 bug。用户在 UI 中取消一个正在执行的 `run_command` 后，执行层内部状态可能被破坏，导致后续所有 `run_command` 永久卡在 RUNNING。
+
+**症状**：`capture-pane` 等即时命令（应 <1s 完成）显示 RUNNING 超过 10 秒。
+
+**恢复**：
+
+- ❌ kill tmux session 无效（问题不在 tmux）
+- ❌ 重试 run_command 无效（执行层锁未释放）
+- ✅ **唯一方案：开新对话**（新 conversation = 新的执行层实例）
+- ✅ 在当前对话中可以继续使用 file I/O、search 等非终端工具
+
+详见 `AG_TERMINAL_BEHAVIOR.md` Section 11。
+
+### Q11: 在 Agent Manager 中对话卡住了，没有任何提示？
+
+这是 AG 框架级 bug。当 `SafeToAutoRun=false` 时，框架等待用户审批，但 **Agent Manager UI 不显示审批提示**（只有主 AG UI 会显示）。对话会无限期卡住。
+
+**缓解**：
+
+- 所有 tmux 命令必须设 `SafeToAutoRun=true`（Section 11 已要求）
+- 对危险命令用 `notify_user` 明确询问，而不是依赖审批流程
+
+详见 `AG_TERMINAL_BEHAVIOR.md` Section 12。
+
 ---
 
 ## 文件清单
@@ -211,3 +237,5 @@ There are NO exceptions for "quick fixes".
 | 2026-03-05 AM | v2 | AG_START/AG_END 手动 marker |
 | 2026-03-05 PM | v2.1 | flock 串行化（失败，已回滚） |
 | 2026-03-05 PM | **v3** | **PS1 自动 marker（当前版本）** |
+| 2026-03-06 | **v3.1** | **新增 User Cancel Recovery 文档（Section 11）** |
+| 2026-03-06 | **v3.2** | **新增 Agent Manager 审批不可见 Bug 文档（Section 12）** |

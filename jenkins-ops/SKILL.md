@@ -142,15 +142,40 @@ pipeline {
 > - Commands with complex quoting must be wrapped in script files
 > - No `\` line continuations in Groovy `sh` strings (XML compression breaks them)
 
+## Anti-Patterns
+
+```
+❌ Installing python/rsync/tools inside the Jenkins container
+   → All tools live on the host machine. Container = scheduler only
+
+❌ Using container paths (/workspace/...) in pipeline scripts
+   → Use host absolute paths (/home/user/...)
+
+❌ Using \ line continuation in Groovy sh strings
+   → XML compression breaks them. Use single-line commands or external script files
+
+❌ Running commands directly in Jenkins container instead of SSH-to-host
+   → ALL task execution goes through: ssh user@localhost 'command'
+
+❌ Bypassing jenkins_ops.py to call Jenkins REST API directly
+   → jenkins_ops.py handles CRUMB, auth, XML config. Direct API calls will miss these
+
+❌ Using interactive SSH in pipelines
+   → Use -o BatchMode=yes -o StrictHostKeyChecking=no for non-interactive SSH
+```
+
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
 | Jenkins unresponsive | `docker ps --filter name=jenkins` / `docker restart jenkins` |
-| Builds queued | Check executor count, stuck builds, `disableConcurrentBuilds` |
-| `python3: not found` | Use full path (e.g., `/home/user/miniconda3/bin/python3`) in pipeline |
+| Builds queued indefinitely | Check executor count, stuck builds, `disableConcurrentBuilds` |
+| `python3: not found` in pipeline | Use full path: `/home/user/miniconda3/bin/python3` |
 | Groovy parse error | Don't use `\` line continuation in `sh` — use single line or external script |
 | Container rebuilt, packages gone | Normal — all commands run on host via SSH, not in container |
+| SSH connection refused | Check sshd running on host: `systemctl status sshd` |
+| Pipeline hangs at SSH step | Ensure `-o BatchMode=yes` is set (prevents password prompt hang) |
+| Job config lost after re-deploy | Check Docker volume mount for Jenkins data directory |
 
 ## Rules
 

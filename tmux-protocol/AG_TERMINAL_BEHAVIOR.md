@@ -131,6 +131,7 @@ AG 进程设置的环境变量（所有 tmux session 继承）：
 3. Background 机制**不可禁用**
 4. 模型行为**本质不确定**——所有软规则只是提高概率，不能保证
 5. 上下文压缩**不可控**——何时压缩、保留什么由框架决定
+6. **用户取消 `run_command` 后，执行层状态可能被破坏**——后续 `run_command` 可能永久卡在 RUNNING（见 Section 11）
 
 ---
 
@@ -153,3 +154,74 @@ WaitMsBeforeAsync = 3000ms 的实际分配：
 - `capture-pane` 看到 `AG_START` 没看到 `AG_END` → **任务层延迟**（命令在跑）
 
 这让模型能做出正确的判断：通讯问题不需要重试任务，任务问题不需要重建通讯。
+
+---
+
+## 11. User Cancel 后的 run_command 卡死问题
+
+> [!CAUTION]
+> 这是 AG **框架级 bug**，不是 tmux 问题。tmux session 内部完全正常，问题在 AG 的命令执行层。
+
+### 触发条件
+
+用户在 AG UI 中取消一个正在执行的 `run_command`（例如 `capture-pane`），之后该 conversation 中的后续 `run_command` 调用可能永久卡在 RUNNING 状态。
+
+### 观察到的行为
+
+```
+Step 104: tmux send-keys -t {id} 'stat ...' Enter     ✅ Background ID（正常）
+Step 107: tmux capture-pane -t {id} -p -S -15          ❌ 被用户取消
+Step 111: tmux capture-pane -t {id} -p -S -10          ⚠️ 永久 RUNNING（capture-pane 是即时命令，应 <1s 完成）
+Step 123: tmux kill-session / new-session              ❌ 被用户取消（无效操作，问题不在 tmux）
+```
+
+### 根因分析
+
+`run_command` 执行层内部可能维护了命令队列或互斥锁。用户取消操作中断了正在执行的命令，但**没有正确清理执行层的内部状态**（例如未释放的锁、未完成的异步回调）。后续命令被阻塞在获取该锁/等待上游完成的环节。
+
+关键区分：
+
+| 层级 | 状态 | 证据 |
+|------|------|------|
+| tmux session | ✅ 正常 | Step 49-85 的 send-keys/capture-pane 全部工作 |
+| AG run_command | ❌ 损坏 | Step 111 的即时命令永久 RUNNING |
+
+### 恢复方法
+
+**没有 conversation 内的恢复方法。** 一旦触发，当前对话的 `run_command` 执行层已不可恢复。
+
+- ❌ kill-session + new-session **无效**（问题不在 tmux）
+- ❌ 重试 run_command **无效**（执行层锁未释放）
+- ✅ **唯一恢复方式：用户开新对话**（新 conversation = 新的 run_command 执行层实例）
+
+### 模型行为指引
+
+当检测到 `capture-pane` 等即时命令超过 10 秒仍 RUNNING 时：
+
+1. **不要 kill tmux session**——问题不在 tmux
+2. **不要反复重试**——只会堆积更多卡住的命令
+3. **告知用户**："run_command 执行层可能在之前的取消操作后损坏，建议开启新对话继续工作"
+4. **在当前对话中切换到非终端工作模式**（file I/O, codebase search 等仍可用）
+
+---
+
+## 12. Agent Manager 审批不可见 Bug
+
+> [!CAUTION]
+> 这是 AG **框架级 bug**。如果用户仅通过 Agent Manager 监控对话，会遇到无限期卡住的问题。
+
+### 问题描述
+
+当模型使用 `SafeToAutoRun=false` 的 `run_command` 时，框架会等待用户审批。但 **Agent Manager UI 不显示审批提示**，只有主 AG UI 会显示。
+
+### 表现
+
+- 对话在 Agent Manager 中看起来"卡住"了，没有任何提示
+- 用户无法看到系统在等什么
+- 实际上框架在等待用户审批一个 `run_command`
+
+### 缓解措施
+
+1. **所有 tmux 命令设 `SafeToAutoRun=true`**（Section 11 已要求）
+2. **对真正危险的命令**，先用 `notify_user` 明确询问用户，而不是依赖 `SafeToAutoRun=false` 的审批流程
+3. **永远不要静默等待审批**——如果必须等待，通过 `notify_user` 告知用户在等什么

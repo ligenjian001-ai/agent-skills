@@ -132,6 +132,21 @@ If `run_command` returns a "Background command ID":
 ❌ WRONG: Background with Exit code 0 → "Got background, let me retry"
 ```
 
+## User Cancel Recovery
+
+If the user cancels a `run_command` mid-execution, subsequent `run_command` calls **may permanently hang** (stuck RUNNING). This is an AG framework bug, not a tmux issue.
+
+**Symptoms**: `capture-pane` or other instant commands show RUNNING for >10 seconds.
+
+**What to do**:
+
+1. ❌ Do NOT kill/recreate the tmux session (problem is not tmux)
+2. ❌ Do NOT retry `run_command` (execution layer lock is stuck)
+3. ✅ **Tell the user**: "Terminal execution may be broken after the cancel. Recommend starting a new conversation."
+4. ✅ Continue with non-terminal tools (`view_file`, `write_to_file`, `grep_search`, etc.)
+
+See `AG_TERMINAL_BEHAVIOR.md` Section 11 for full analysis.
+
 ## Large Output
 
 For commands with large output, use one of:
