@@ -23,7 +23,8 @@ TASK_DIR="${3:?Usage: panel_launch.sh <executor> <agent_name> <task_dir> [projec
 PROJECT_DIR="${4:-/tmp}"
 
 # Derive session name: /tmp/panel/task123/round_0/skeptic → panel-task123-r0-skeptic
-TASK_ID=$(echo "$TASK_DIR" | grep -oP 'panel/\K[^/]+')
+# Support both /tmp/panel/{id}/... and ~/.panel-discussions/{id}/... paths
+TASK_ID=$(echo "$TASK_DIR" | grep -oP '(?:panel-discussions|panel)/\K[^/]+')
 ROUND_NUM=$(echo "$TASK_DIR" | grep -oP 'round_\K\d+')
 SESSION="panel-${TASK_ID}-r${ROUND_NUM}-${AGENT_NAME}"
 

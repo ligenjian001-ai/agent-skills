@@ -1,6 +1,6 @@
 ---
 name: agent-panel-discussion
-description: "Multi-agent panel discussion — CC, Codex, Gemini debate a topic with preset stances across multiple rounds, producing an HTML report with academic-style references."
+description: "Multi-agent panel discussion — Codex subagents debate a topic with preset stances across multiple rounds, producing an HTML report with academic-style references."
 ---
 
 # Agent Panel Discussion Skill
@@ -17,12 +17,12 @@ description: "Multi-agent panel discussion — CC, Codex, Gemini debate a topic 
 
 | Agent | Executor | Stance | Description |
 |-------|----------|--------|-------------|
-| 🔴 Skeptic | CC (Claude) | Devil's Advocate | Challenges assumptions, finds risks, stress-tests reasoning |
-| 🔵 Pragmatist | CC (Claude) | Engineer | Focuses on feasibility, trade-offs, actionable steps |
-| 🟢 Optimist | CC (Claude) | Visionary | Identifies opportunities, thinks big, champions innovation |
+| 🔴 Skeptic | Codex (OpenAI) | Devil's Advocate | Challenges assumptions, finds risks, stress-tests reasoning |
+| 🔵 Pragmatist | Codex (OpenAI) | Engineer | Focuses on feasibility, trade-offs, actionable steps |
+| 🟢 Optimist | Codex (OpenAI) | Visionary | Identifies opportunities, thinks big, champions innovation |
 
 > [!NOTE]
-> All 3 agents default to CC (Claude) for maximum reliability. The personas are differentiated
+> All 3 agents default to Codex (OpenAI). The personas are differentiated
 > by prompt, not by engine. `panel_launch.sh` delegates to `task-delegate/task_launch.sh` internally
 > and supports all backends: `cc`, `gemini`, `codex`, `deepseek`. Codex has auto-fallback to Gemini.
 
@@ -37,7 +37,7 @@ description: "Multi-agent panel discussion — CC, Codex, Gemini debate a topic 
 
 ```bash
 TASK_ID="panel_$(date +%Y%m%d_%H%M)"
-TASK_DIR="/tmp/panel/${TASK_ID}"
+TASK_DIR="${HOME}/.panel-discussions/${TASK_ID}"
 SKILL_DIR="/home/lgj/agent-skills/agent-panel-discussion"
 TOTAL_ROUNDS=3
 
@@ -45,6 +45,11 @@ mkdir -p "${TASK_DIR}"
 # Write topic.txt with the problem + research material
 write_to_file("${TASK_DIR}/topic.txt", ...)
 ```
+
+> [!CAUTION]
+> **持久化存储 — 必须使用 `~/.panel-discussions/`，禁止使用 `/tmp/`。**
+> 讨论数据（topic、agent输出、user_input、最终报告）是有长期价值的资产。
+> `/tmp` 在重启后会被清除，导致所有讨论记录丢失。
 
 ### Phase 1: Auto-Prepare Prompts
 
@@ -67,9 +72,9 @@ bash ${SKILL_DIR}/scripts/panel_prepare.sh ${TASK_DIR} 0 "" ${TOTAL_ROUNDS}
 ### Phase 2: Launch Agents
 
 ```bash
-bash ${SKILL_DIR}/scripts/panel_launch.sh cc  skeptic    ${TASK_DIR}/round_0/skeptic
-bash ${SKILL_DIR}/scripts/panel_launch.sh cc  pragmatist ${TASK_DIR}/round_0/pragmatist
-bash ${SKILL_DIR}/scripts/panel_launch.sh cc  optimist   ${TASK_DIR}/round_0/optimist
+bash ${SKILL_DIR}/scripts/panel_launch.sh codex  skeptic    ${TASK_DIR}/round_0/skeptic
+bash ${SKILL_DIR}/scripts/panel_launch.sh codex  pragmatist ${TASK_DIR}/round_0/pragmatist
+bash ${SKILL_DIR}/scripts/panel_launch.sh codex  optimist   ${TASK_DIR}/round_0/optimist
 ```
 
 > [!CAUTION]
@@ -210,9 +215,9 @@ For each rebuttal round:
 bash ${SKILL_DIR}/scripts/panel_prepare.sh ${TASK_DIR} 1 "" ${TOTAL_ROUNDS}
 
 # Launch, monitor, collect — same as Phase 2
-bash ${SKILL_DIR}/scripts/panel_launch.sh cc  skeptic    ${TASK_DIR}/round_1/skeptic
-bash ${SKILL_DIR}/scripts/panel_launch.sh cc  pragmatist ${TASK_DIR}/round_1/pragmatist
-bash ${SKILL_DIR}/scripts/panel_launch.sh cc  optimist   ${TASK_DIR}/round_1/optimist
+bash ${SKILL_DIR}/scripts/panel_launch.sh codex  skeptic    ${TASK_DIR}/round_1/skeptic
+bash ${SKILL_DIR}/scripts/panel_launch.sh codex  pragmatist ${TASK_DIR}/round_1/pragmatist
+bash ${SKILL_DIR}/scripts/panel_launch.sh codex  optimist   ${TASK_DIR}/round_1/optimist
 
 # Wait for completion, then:
 bash ${SKILL_DIR}/scripts/panel_collect.sh ${TASK_DIR} 1
@@ -317,9 +322,9 @@ All agent templates include citation rules:
 | Parameter | Default | Override |
 |-----------|---------|----------|
 | Rounds | 3 | User request |
-| Skeptic executor | CC | Can swap to gemini/codex |
-| Pragmatist executor | CC | Can swap to gemini/codex |
-| Optimist executor | CC | Can swap to gemini/codex |
+| Skeptic executor | Codex | Can swap to cc/gemini |
+| Pragmatist executor | Codex | Can swap to cc/gemini |
+| Optimist executor | Codex | Can swap to cc/gemini |
 | Word limit | 500-800 per agent per round | Adjustable in prompt |
 
 ## Anti-Patterns

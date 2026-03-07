@@ -1,0 +1,67 @@
+# Daily Report — 项目匹配配置
+# 匹配优先级: project 字段 (task-delegate) > 路径匹配 > 关键词匹配
+
+projects:
+  - name: "hft_build"
+    display: "HFT Build — AI Native量化基础设施"
+    match:
+      paths:
+        - "/home/lgj/hft_build"
+      keywords:
+        - "hft_build"
+        - "hft build"
+        - "orderbook"
+        - "ob-cli"
+        - "ob_cli"
+        - "MCP"
+        - "策略开发"
+        - "回测"
+        - "SimpleMaker"
+        - "ScoreMaker"
+        - "playground"
+        - "trading_agent"
+        - "tora_bridge"
+        - "Alpha Factory"
+        - "蒋龙"
+        - "通联"
+        - "CK"
+        - "ck_"
+
+  - name: "agent-skills"
+    display: "Agent Skills — AG工具链建设"
+    match:
+      paths:
+        - "/home/lgj/agent-skills"
+      keywords:
+        - "skill"
+        - "tmux-protocol"
+        - "ag-archive"
+        - "task-delegate"
+        - "panel-discussion"
+        - "daily-report"
+        - "jenkins-ops"
+        - "skill-creator"
+        - "infra-request"
+        - "ag-lag"
+        - "GEMINI.md"
+        - "agent skills"
+
+  - name: "lgj_strategy_zoo"
+    display: "Strategy Zoo — 策略研究"
+    match:
+      paths:
+        - "/home/lgj/lgj_strategy_zoo"
+      keywords:
+        - "strategy_zoo"
+        - "strategy zoo"
+
+  - name: "poker_research"
+    display: "Poker Research — AI扑克教练研究"
+    match:
+      paths: []
+      keywords:
+        - "poker"
+        - "GTO"
+        - "扑克"
+
+default_project: "其他"
