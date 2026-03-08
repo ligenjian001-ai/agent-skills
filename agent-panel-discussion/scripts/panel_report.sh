@@ -1,20 +1,23 @@
 #!/bin/bash
 # panel_report.sh — Generate the final panel discussion report
 #
-# Usage: panel_report.sh <task_dir> <total_rounds>
+# Usage: panel_report.sh <panel_dir> <total_rounds>
 #
-# task_dir:       /tmp/panel/{task_id}/
+# panel_dir:      ~/.panel-discussions/{panel_id}/
 # total_rounds:   total number of rounds (e.g. 3 for round_0, round_1, round_2)
 #
-# Reads:   $task_dir/round_*_summary.md, $task_dir/topic.txt
-# Produces: $task_dir/final_report.md
+# Reads:   $panel_dir/round_*_summary.md, $panel_dir/topic.txt
+#          ~/.task-delegate/{task_id}/execution_record.json (via manifest.json)
+# Produces: $panel_dir/final_report.md
 
 set -euo pipefail
 
-TASK_DIR="${1:?Usage: panel_report.sh <task_dir> <total_rounds>}"
-TOTAL_ROUNDS="${2:?Usage: panel_report.sh <task_dir> <total_rounds>}"
+TASK_DIR="${1:?Usage: panel_report.sh <panel_dir> <total_rounds>}"
+TOTAL_ROUNDS="${2:?Usage: panel_report.sh <panel_dir> <total_rounds>}"
 
 REPORT_FILE="${TASK_DIR}/final_report.md"
+MANIFEST="${TASK_DIR}/manifest.json"
+TASK_DELEGATE_DIR="${HOME}/.task-delegate"
 TOPIC=""
 if [[ -f "${TASK_DIR}/topic.txt" ]]; then
   TOPIC=$(cat "${TASK_DIR}/topic.txt")
@@ -22,29 +25,37 @@ fi
 
 TIMESTAMP=$(date -Iseconds)
 
-# Read actual executors from round 0 records (dynamic, supports fallback)
+# Get task_id from manifest
+get_task_id() {
+  local agent="$1" round="$2"
+  if [[ -f "$MANIFEST" ]] && command -v python3 &>/dev/null; then
+    python3 -c "
+import json
+m = json.load(open('${MANIFEST}'))
+print(m.get('tasks',{}).get('round_${round}',{}).get('${agent}',''))
+" 2>/dev/null
+  else
+    local panel_id=$(basename "$TASK_DIR")
+    local panel_ts=$(echo "$panel_id" | grep -oP '\d{8}_\d{4}')
+    echo "${panel_ts}_panel_r${round}_${agent}"
+  fi
+}
+
+# Read actual executors from execution records (via task-delegate)
 get_panelist_label() {
   local agent="$1"
-  local record="${TASK_DIR}/round_0/${agent}/execution_record.json"
+  local task_id=$(get_task_id "$agent" 0)
+  local record="${TASK_DELEGATE_DIR}/${task_id}/execution_record.json"
   if [[ -f "$record" ]] && command -v python3 &>/dev/null; then
     python3 -c "
 import json
 d = json.load(open('${record}'))
-exe = d.get('executor', 'unknown')
-fb = d.get('fallback', '')
-labels = {'cc': 'CC (Claude)', 'gemini': 'Gemini (Google)', 'codex': 'Codex (OpenAI)', 'ag-fallback': 'AG (fallback)'}
-label = labels.get(exe, exe)
-if fb:
-    label += f' [{fb}]'
-print(label)
+exe = d.get('backend', d.get('executor', 'unknown'))
+labels = {'cc': 'CC (Claude)', 'gemini': 'Gemini (Google)', 'codex': 'Codex (OpenAI)'}
+print(labels.get(exe, exe))
 " 2>/dev/null || echo "?"
   else
-    case "$agent" in
-      skeptic) echo "CC (Claude)" ;;
-      pragmatist) echo "CC (Claude)" ;;
-      optimist) echo "CC (Claude)" ;;
-      *) echo "?" ;;
-    esac
+    echo "?"
   fi
 }
 
@@ -76,9 +87,10 @@ print(label)
   for ((r=0; r<TOTAL_ROUNDS; r++)); do
     ROW="| 第 ${r} 轮 |"
     for agent in skeptic pragmatist optimist; do
-      record="${TASK_DIR}/round_${r}/${agent}/execution_record.json"
+      task_id=$(get_task_id "$agent" "$r")
+      record="${TASK_DELEGATE_DIR}/${task_id}/execution_record.json"
       if [[ -f "$record" ]]; then
-        status=$(python3 -c "import json; d=json.load(open('${record}')); print(f\"{d['status']} ({d['duration_human']})\")" 2>/dev/null || echo "?")
+        status=$(python3 -c "import json; d=json.load(open('${record}')); s=d['duration_seconds']; print(f\"{d['status']} ({s//60}m {s%60}s)\")" 2>/dev/null || echo "?")
         ROW+=" ${status} |"
       else
         ROW+=" ❌ missing |"

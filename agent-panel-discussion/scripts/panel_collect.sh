@@ -1,26 +1,23 @@
 #!/bin/bash
 # panel_collect.sh — Collect outputs from all agents in a round and produce a summary
 #
-# Usage: panel_collect.sh <task_dir> <round_num>
+# Usage: panel_collect.sh <panel_dir> <round_num>
 #
-# task_dir:  /tmp/panel/{task_id}/
-# round_num: 0, 1, 2, ...
+# panel_dir:  ~/.panel-discussions/{panel_id}/
+# round_num:  0, 1, 2, ...
 #
-# Reads:   $task_dir/round_N/{agent}/output.md for each agent
-# Produces: $task_dir/round_N_summary.md
+# Reads execution records and outputs from ~/.task-delegate/{task_id}/
+# Uses manifest.json to find task_ids for each agent in the round.
+# Produces: $panel_dir/round_N_summary.md
 
 set -euo pipefail
 
-TASK_DIR="${1:?Usage: panel_collect.sh <task_dir> <round_num>}"
-ROUND_NUM="${2:?Usage: panel_collect.sh <task_dir> <round_num>}"
+PANEL_DIR="${1:?Usage: panel_collect.sh <panel_dir> <round_num>}"
+ROUND_NUM="${2:?Usage: panel_collect.sh <panel_dir> <round_num>}"
 
-ROUND_DIR="${TASK_DIR}/round_${ROUND_NUM}"
-SUMMARY_FILE="${TASK_DIR}/round_${ROUND_NUM}_summary.md"
-
-if [[ ! -d "$ROUND_DIR" ]]; then
-  echo "ERROR: Round directory not found: ${ROUND_DIR}" >&2
-  exit 1
-fi
+MANIFEST="${PANEL_DIR}/manifest.json"
+SUMMARY_FILE="${PANEL_DIR}/round_${ROUND_NUM}_summary.md"
+TASK_DELEGATE_DIR="${HOME}/.task-delegate"
 
 # Agent display config
 declare -A AGENT_EMOJI=(
@@ -34,43 +31,58 @@ declare -A AGENT_TITLE=(
   [optimist]="乐观派（愿景者）"
 )
 
-# Read actual executor from execution_record.json (dynamic, supports fallback)
-get_executor_label() {
+# Get task_id for an agent from manifest, or derive from panel_id
+get_task_id() {
   local agent="$1"
-  local record="${ROUND_DIR}/${agent}/execution_record.json"
+  if [[ -f "$MANIFEST" ]] && command -v python3 &>/dev/null; then
+    python3 -c "
+import json
+m = json.load(open('${MANIFEST}'))
+tasks = m.get('tasks', {}).get('round_${ROUND_NUM}', {})
+print(tasks.get('${agent}', ''))
+" 2>/dev/null
+  else
+    # Derive from panel_id convention: YYYYMMDD_HHMM_panel_rN_agent
+    local panel_id=$(basename "$PANEL_DIR")
+    local panel_ts=$(echo "$panel_id" | grep -oP '\d{8}_\d{4}')
+    echo "${panel_ts}_panel_r${ROUND_NUM}_${agent}"
+  fi
+}
+
+# Read executor label from execution_record.json
+get_executor_label() {
+  local task_id="$1"
+  local record="${TASK_DELEGATE_DIR}/${task_id}/execution_record.json"
   if [[ -f "$record" ]] && command -v python3 &>/dev/null; then
     python3 -c "
 import json
 d = json.load(open('${record}'))
-exe = d.get('executor', 'unknown')
-fb = d.get('fallback', '')
-labels = {'cc': 'CC / Claude', 'gemini': 'Gemini / Google', 'codex': 'Codex / OpenAI', 'ag-fallback': 'AG (fallback)'}
-label = labels.get(exe, exe)
-if fb:
-    label += f' (fallback: {fb})'
-print(label)
+exe = d.get('backend', d.get('executor', 'unknown'))
+labels = {'cc': 'CC / Claude', 'gemini': 'Gemini / Google', 'codex': 'Codex / OpenAI'}
+print(labels.get(exe, exe))
 " 2>/dev/null || echo "unknown"
   else
-    # Fallback to default mapping
-    case "$agent" in
-      skeptic) echo "CC / Claude" ;;
-      pragmatist) echo "CC / Claude" ;;
-      optimist) echo "CC / Claude" ;;
-      *) echo "unknown" ;;
-    esac
+    echo "unknown"
   fi
 }
 
 # Check completion status
 ALL_DONE=true
 FAILED_AGENTS=()
-for agent_dir in "$ROUND_DIR"/*/; do
-  agent=$(basename "$agent_dir")
-  record="${agent_dir}execution_record.json"
-  output="${agent_dir}output.md"
+for agent in skeptic pragmatist optimist; do
+  task_id=$(get_task_id "$agent")
+  if [[ -z "$task_id" ]]; then
+    echo "⚠️  Agent ${agent}: task_id not found in manifest" >&2
+    FAILED_AGENTS+=("$agent")
+    continue
+  fi
+
+  task_dir="${TASK_DELEGATE_DIR}/${task_id}"
+  record="${task_dir}/execution_record.json"
+  output="${task_dir}/output.md"
 
   if [[ ! -f "$record" ]]; then
-    echo "⏳ Agent ${agent}: still running (no execution_record.json)" >&2
+    echo "⏳ Agent ${agent}: still running (no execution_record.json in ${task_dir})" >&2
     ALL_DONE=false
   elif [[ ! -f "$output" ]]; then
     echo "⚠️  Agent ${agent}: completed but no output.md" >&2
@@ -81,7 +93,7 @@ for agent_dir in "$ROUND_DIR"/*/; do
       echo "❌ Agent ${agent}: failed (status=${status})" >&2
       FAILED_AGENTS+=("$agent")
     else
-      echo "✅ Agent ${agent}: done" >&2
+      echo "✅ Agent ${agent}: done (${task_id})" >&2
     fi
   fi
 done
@@ -92,7 +104,7 @@ if [[ "$ALL_DONE" == "false" ]]; then
   exit 2
 fi
 
-# Build summary — topic only in Round 0 header, not repeated
+# Build summary
 {
   if [[ "$ROUND_NUM" -eq 0 ]]; then
     echo "# 第 ${ROUND_NUM} 轮：开场陈述"
@@ -102,10 +114,12 @@ fi
   echo ""
 
   for agent in skeptic pragmatist optimist; do
-    output="${ROUND_DIR}/${agent}/output.md"
+    task_id=$(get_task_id "$agent")
+    task_dir="${TASK_DELEGATE_DIR}/${task_id}"
+    output="${task_dir}/output.md"
     emoji="${AGENT_EMOJI[$agent]:-❓}"
     title="${AGENT_TITLE[$agent]:-$agent}"
-    executor=$(get_executor_label "$agent")
+    executor=$(get_executor_label "$task_id")
 
     echo "---"
     echo ""

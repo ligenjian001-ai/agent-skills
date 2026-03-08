@@ -17,14 +17,16 @@ description: Delegate tasks to any backend (CC, Codex, Gemini, DeepSeek). AG act
 
 ### Backend Selection Guide
 
-| Scenario | Best Backend | Why |
+> **核心原则**：AG 担任编排者，一旦涉及实际编码就委派。AG 只写验证代码和编排脚本。
+
+| 任务类型 | Best Backend | Why |
 |----------|-------------|-----|
-| Multi-file code changes | CC | Best at coordinated edits, native subagent |
-| Multi-file analysis/audit | CC | Strong at reading many files |
-| Focused single-file edit | CC or Gemini | Either works |
-| Independent verification | Codex or Gemini | Separation of concerns |
-| Simple text analysis | DeepSeek | Low cost, fast |
-| Simple tasks | AG directly | Zero cost, no dispatch overhead |
+| **编码实现** — 新功能、修复、重构 | CC | 最强编码能力，多文件协调编辑 |
+| **推理 & 长链路思考** — 分析、调试、架构决策 | Codex | 强推理能力，适合深度思考 |
+| **多模态** — 图片、浏览器、OCR | Gemini | 原生多模态支持 |
+| **性价比** — 简单生成、快速分析 | DeepSeek | 低成本、快速 |
+| **验证 & 编排** — 检查代码、协调任务 | AG 自身 | 保持上下文，零 dispatch 开销 |
+| **多角色辩论** — 方案评估 | Codex / CC 混合 | 通过 panel-discussion 编排 |
 
 ## Workflow
 
@@ -72,13 +74,13 @@ Ensure all tests pass before finishing.
 > A vague prompt like "add authentication" will fail. AG MUST provide the full picture.
 > Spend 2-5 minutes on prompt prep — it saves 30min+ of the backend wandering.
 
-**Task ID convention**: `{short_desc}_{YYYYMMDD_HHMM}` e.g. `auth_refactor_20260305_0200`
+**Task ID convention**: `YYYYMMDD_HHMM_{short_desc}` e.g. `20260305_0200_auth_refactor` — timestamp first for sortability
 
 ### Step 2: Launch
 
 ```bash
 # Create task directory
-TASK_ID="{short_desc}_{YYYYMMDD_HHMM}"
+TASK_ID="{YYYYMMDD_HHMM}_{short_desc}"
 mkdir -p ~/.task-delegate/${TASK_ID}
 
 # Write prompt.txt (use write_to_file tool, NEVER send-keys)
@@ -217,20 +219,21 @@ When the user says the backend is done, or AG detects completion:
 
 ## Multi-Role Dispatch (Advanced)
 
-For multi-agent scenarios (e.g. agent-panel-discussion), use `ag_dispatch.sh`:
+For multi-agent scenarios (e.g. agent-panel-discussion), use `task_launch.sh` with `--role` and `--session`:
 
 ```bash
-SKILL_DIR=/home/lgj/agent-skills/task-delegate/scripts
+# Create IPC directory and write prompt
+TASK_ID="YYYYMMDD_HHMM_{desc}_{role}"
+mkdir -p ~/.task-delegate/${TASK_ID}
+write_to_file("~/.task-delegate/${TASK_ID}/prompt.txt", ...)
 
-# Create IPC directory
-mkdir -p ~/.task-delegate/{task_id}/{role}
-# Write prompt
-write_to_file("~/.task-delegate/{task_id}/{role}/prompt.txt", ...)
-
-# Dispatch in dedicated tmux session
-tmux new-session -d -s {conv_id}-{role} -x 200 -y 50
-tmux send-keys -t {conv_id}-{role} \
-  "bash ${SKILL_DIR}/ag_dispatch.sh {executor} {role} ~/.task-delegate/{task_id}/{role}" Enter
+# Launch in dedicated tmux session with role tracking
+bash /home/lgj/agent-skills/task-delegate/scripts/task_launch.sh \
+  ${TASK_ID} ${PROJECT_DIR} \
+  --backend cc \
+  --role {role} \
+  --source {conversation_id} \
+  --session {custom_session_name}
 ```
 
 ### IPC Protocol
@@ -238,17 +241,32 @@ tmux send-keys -t {conv_id}-{role} \
 ```text
 ~/.task-delegate/{task_id}/
 ├── prompt.txt              ← AG → Backend (task prompt)
+├── runner.sh               ← Auto-generated runner script
 ├── live.log                ← Real-time backend output
-├── runner.sh               ← Generated runner script
-├── execution_record.json   ← Completion metadata
-├── {role}/                 ← Multi-role subdirectories
-│   ├── prompt.txt
-│   ├── live.log
-│   ├── raw_output.json
-│   ├── result.json
-│   ├── execution_record.json
-│   └── feedback.json
+└── execution_record.json   ← Completion metadata
 ```
+
+### execution_record.json Schema
+
+```json
+{
+  "task_id": "20260308_0341_issue49_developer",
+  "backend": "cc",
+  "role": "developer",
+  "source_conversation": "99c5cf61-...",
+  "project": "/home/lgj/hft_build",
+  "status": "success",
+  "exit_code": 0,
+  "duration_seconds": 421,
+  "started_at": "2026-03-08T01:58:13+08:00",
+  "finished_at": "2026-03-08T02:05:14+08:00",
+  "prompt_file": "...",
+  "api_billing": false,
+  "live_log": "..."
+}
+```
+
+`role` and `source_conversation` are optional. Langfuse fields (`langfuse_trace_id`, `cost_usd`) are added by `ag_trace.py` when `--trace` is enabled.
 
 ## Retrospective (on demand)
 
@@ -306,9 +324,10 @@ AG should still include critical context in `prompt.txt` because:
 | DeepSeek API error | Check `DEEPSEEK_API_KEY`, check API URL |
 | Codex 401 Unauthorized | Run `codex login` to re-authenticate |
 
-## Future: agent-panel-discussion Integration
+## Integration: panel-discussion
 
 > [!NOTE]
-> `agent-panel-discussion/scripts/panel_launch.sh` currently duplicates ~80% of `task_launch.sh`'s logic.
-> v2.0 will refactor `panel_launch.sh` to call `task_launch.sh` internally, adding `--session-name` and
-> `--post-hook` extension points for panel-specific output extraction and session naming.
+> `agent-panel-discussion/scripts/panel_launch.sh` is a thin wrapper around `task_launch.sh`.
+> Panel agent execution records are stored in `~/.task-delegate/` with task_ids like
+> `YYYYMMDD_HHMM_panel_rN_agent`. The panel orchestration layer (`~/.panel-discussions/`)
+> stores only topic, summaries, reports, and a `manifest.json` linking to task_ids.

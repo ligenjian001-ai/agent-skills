@@ -13,6 +13,9 @@
 #   --post-run SCRIPT                     Script to run after backend completes (in-session, receives task_dir as $1)
 #   --extra-record JSON                   Extra JSON fields to merge into execution_record.json
 #   --done-marker TEXT                    Completion marker text (default: TASK_DONE / TASK_FAIL)
+#   --role NAME                           Role name (e.g. skeptic, developer) — written to execution_record
+#   --source CONV_ID                      Source conversation ID — enables bidirectional linkage
+#   --trace                               Enable async Langfuse tracing after completion
 #
 # Creates tmux session, runs the chosen backend headless, streams to live.log
 # On completion: writes execution_record.json, prints done marker
@@ -34,6 +37,9 @@ POST_RUN=""
 EXTRA_RECORD=""
 DONE_MARKER_OK="TASK_DONE"
 DONE_MARKER_FAIL="TASK_FAIL"
+ROLE=""
+SOURCE_CONV=""
+TRACE=false
 
 shift 2
 while [[ $# -gt 0 ]]; do
@@ -47,6 +53,9 @@ while [[ $# -gt 0 ]]; do
     --post-run) POST_RUN="$2"; shift 2 ;;
     --extra-record) EXTRA_RECORD="$2"; shift 2 ;;
     --done-marker) DONE_MARKER_OK="$2"; DONE_MARKER_FAIL="${2}_FAIL"; shift 2 ;;
+    --role) ROLE="$2"; shift 2 ;;
+    --source) SOURCE_CONV="$2"; shift 2 ;;
+    --trace) TRACE=true; shift ;;
     *) echo "Unknown arg: $1"; exit 1 ;;
   esac
 done
@@ -118,6 +127,9 @@ DONE_MARKER_OK="$6"
 DONE_MARKER_FAIL="$7"
 POST_RUN="${8:-}"
 EXTRA_RECORD="${9:-}"
+ROLE="${10:-}"
+SOURCE_CONV="${11:-}"
+TRACE="${12:-false}"
 
 PROMPT_FILE="${TASK_DIR}/prompt.txt"
 LIVE_LOG="${TASK_DIR}/live.log"
@@ -220,15 +232,19 @@ echo "[task-launch] Duration: ${DURATION_MIN}m ${DURATION_SEC}s" | tee -a "$LIVE
 echo "[task-launch] Exit code: ${EXIT_CODE}" | tee -a "$LIVE_LOG"
 
 # Write execution record
+# Build optional fields
+OPT_FIELDS=""
+[[ -n "$ROLE" ]] && OPT_FIELDS="${OPT_FIELDS}  \"role\": \"${ROLE}\",\n"
+[[ -n "$SOURCE_CONV" ]] && OPT_FIELDS="${OPT_FIELDS}  \"source_conversation\": \"${SOURCE_CONV}\",\n"
+
 cat > "$EXEC_RECORD" <<EOF
 {
   "task_id": "$(basename "$TASK_DIR")",
   "backend": "${BACKEND}",
-  "project": "${PROJECT_DIR}",
+$(echo -e "$OPT_FIELDS")  "project": "${PROJECT_DIR}",
   "status": "${STATUS}",
   "exit_code": ${EXIT_CODE},
   "duration_seconds": ${DURATION_S},
-  "duration_human": "${DURATION_MIN}m ${DURATION_SEC}s",
   "started_at": "$(date -d @${START_TS} -Iseconds)",
   "finished_at": "$(date -Iseconds)",
   "prompt_file": "${PROMPT_FILE}",
@@ -256,6 +272,22 @@ if [[ -n "$POST_RUN" && -f "$POST_RUN" ]]; then
   bash "$POST_RUN" "$TASK_DIR" "$BACKEND" "$STATUS" 2>&1 | tee -a "$LIVE_LOG" || true
 fi
 
+# Async Langfuse trace (fire-and-forget, never blocks)
+if [[ "$TRACE" == "true" ]]; then
+  SCRIPT_DIR_RUNNER="$(cd "$(dirname "$0")" 2>/dev/null && pwd || dirname "${BASH_SOURCE[0]}")"
+  TRACE_SCRIPT="${SCRIPT_DIR_RUNNER}/ag_trace.py"
+  if command -v python3 &>/dev/null && [[ -f "$TRACE_SCRIPT" ]]; then
+    python3 "$TRACE_SCRIPT" \
+      --executor "$BACKEND" \
+      --role "${ROLE:-default}" \
+      --ipc-dir "$TASK_DIR" \
+      --project "$PROJECT_DIR" \
+      --duration-ms "$((DURATION_S * 1000))" \
+      &>/dev/null &
+    disown
+  fi
+fi
+
 if [[ "$STATUS" == "success" ]]; then
   echo "$DONE_MARKER_OK"
 else
@@ -275,7 +307,7 @@ sleep 0.5
 # Escape extra_record for shell argument passing
 EXTRA_RECORD_ESC="${EXTRA_RECORD//\"/\\\"}"
 
-tmux send-keys -t "$SESSION" "bash ${RUNNER} '${TASK_DIR}' '${PROJECT_DIR}' '${BACKEND}' '${API_BILLING}' '${BUDGET}' '${DONE_MARKER_OK}' '${DONE_MARKER_FAIL}' '${POST_RUN}' '${EXTRA_RECORD_ESC}'" Enter
+tmux send-keys -t "$SESSION" "bash ${RUNNER} '${TASK_DIR}' '${PROJECT_DIR}' '${BACKEND}' '${API_BILLING}' '${BUDGET}' '${DONE_MARKER_OK}' '${DONE_MARKER_FAIL}' '${POST_RUN}' '${EXTRA_RECORD_ESC}' '${ROLE}' '${SOURCE_CONV}' '${TRACE}'" Enter
 
 echo ""
 if [[ -n "$FALLBACK_USED" ]]; then
