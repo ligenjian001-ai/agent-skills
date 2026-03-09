@@ -54,7 +54,56 @@ else:
       cp "$LIVE_LOG" "$OUTPUT_FILE"
     fi
     ;;
-  gemini|codex|deepseek|*)
+  codex)
+    # Extract only the agent's analysis from Codex output
+    # Strips: CLI headers, session metadata, user prompt echo, token counts
+    if command -v python3 &>/dev/null; then
+      python3 -c "
+import sys
+
+lines = open('${LIVE_LOG}').readlines()
+# Find the last 'assistant' or actual content block
+# Codex output format: header block → 'user' → prompt echo → 'assistant' → actual output → 'tokens used'
+in_output = False
+output_lines = []
+skip_patterns = [
+    '[task-launch]', '---', 'OpenAI Codex v', '--------',
+    'workdir:', 'model:', 'provider:', 'approval:', 'sandbox:',
+    'reasoning effort:', 'reasoning summaries:', 'session id:',
+    'tokens used', 'mcp startup:', 'user', 'codex',
+    '[WARN]', 'Approval mode',
+]
+
+for line in lines:
+    stripped = line.strip()
+    if not stripped:
+        if in_output:
+            output_lines.append('')
+        continue
+    # Skip known noise patterns
+    if any(stripped.startswith(p) or stripped == p for p in skip_patterns):
+        continue
+    # Skip lines that look like token counts (just a number)
+    if stripped.replace(',', '').isdigit() and len(stripped) < 10:
+        continue
+    in_output = True
+    output_lines.append(line.rstrip())
+
+# Trim leading/trailing blank lines
+while output_lines and not output_lines[0].strip():
+    output_lines.pop(0)
+while output_lines and not output_lines[-1].strip():
+    output_lines.pop()
+
+print('\n'.join(output_lines))
+" > "$OUTPUT_FILE" 2>/dev/null || cp "$LIVE_LOG" "$OUTPUT_FILE"
+    else
+      grep -v '^\[task-launch\]' "$LIVE_LOG" \
+        | grep -v '^---$' \
+        > "$OUTPUT_FILE" || cp "$LIVE_LOG" "$OUTPUT_FILE"
+    fi
+    ;;
+  gemini|deepseek|*)
     # Strip log/noise lines, keep content
     grep -v '^\[task-launch\]' "$LIVE_LOG" \
       | grep -v '^---$' \

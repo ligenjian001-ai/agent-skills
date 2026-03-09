@@ -88,6 +88,9 @@ mkdir -p ~/.task-delegate/${TASK_ID}
 # Launch via skill script
 SKILL_DIR=$(dirname $(readlink -f $(find /home/lgj/agent-skills/task-delegate -name task_launch.sh)))
 bash "$SKILL_DIR/task_launch.sh" ${TASK_ID} {project_dir} --backend cc
+
+# Resume a prior session (for multi-round workflows like panel discussions)
+bash "$SKILL_DIR/task_launch.sh" ${TASK_ID} {project_dir} --backend cc --resume-session {prior_session_id}
 ```
 
 Supported backends: `cc`, `codex`, `gemini`, `deepseek`
@@ -254,6 +257,7 @@ bash /home/lgj/agent-skills/task-delegate/scripts/task_launch.sh \
   "backend": "cc",
   "role": "developer",
   "source_conversation": "99c5cf61-...",
+  "session_id": "3f2194fb-7bfa-46ab-8be7-bb68a3221b24",
   "project": "/home/lgj/hft_build",
   "status": "success",
   "exit_code": 0,
@@ -261,12 +265,13 @@ bash /home/lgj/agent-skills/task-delegate/scripts/task_launch.sh \
   "started_at": "2026-03-08T01:58:13+08:00",
   "finished_at": "2026-03-08T02:05:14+08:00",
   "prompt_file": "...",
+  "prompt_bytes": 2614,
   "api_billing": false,
   "live_log": "..."
 }
 ```
 
-`role` and `source_conversation` are optional. Langfuse fields (`langfuse_trace_id`, `cost_usd`) are added by `ag_trace.py` when `--trace` is enabled.
+`role`, `source_conversation`, `session_id`, and `resumed_from` are optional. `session_id` is auto-extracted from CC/Codex output; use it with `--resume-session` for multi-round workflows. `prompt_bytes` records the prompt size for token consumption tracking. Langfuse fields (`langfuse_trace_id`, `cost_usd`) are added by `ag_trace.py` when `--trace` is enabled.
 
 ## Retrospective (on demand)
 

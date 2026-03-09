@@ -74,6 +74,29 @@ if [[ -n "$SOURCE_CONV" ]]; then
   SOURCE_ARG="--source ${SOURCE_CONV}"
 fi
 
+# Session resume: for R1+, find prior round's session_id to enable incremental communication
+RESUME_ARG=""
+if [[ "$ROUND_NUM" -gt 0 ]]; then
+  PREV_ROUND=$((ROUND_NUM - 1))
+  PREV_TASK_ID="${PANEL_TS}_panel_r${PREV_ROUND}_${AGENT_NAME}"
+  PREV_RECORD="${HOME}/.task-delegate/${PREV_TASK_ID}/execution_record.json"
+  if [[ -f "$PREV_RECORD" ]] && command -v python3 &>/dev/null; then
+    PREV_SESSION=$(python3 -c "
+import json
+d = json.load(open('${PREV_RECORD}'))
+print(d.get('session_id', ''))
+" 2>/dev/null || true)
+    if [[ -n "$PREV_SESSION" ]]; then
+      RESUME_ARG="--resume-session ${PREV_SESSION}"
+      echo "[panel-launch] Resuming session from R${PREV_ROUND}: ${PREV_SESSION}"
+    else
+      echo "[panel-launch] No session_id in R${PREV_ROUND} record, starting fresh session"
+    fi
+  else
+    echo "[panel-launch] No R${PREV_ROUND} execution record for ${AGENT_NAME}, starting fresh session"
+  fi
+fi
+
 # Launch via task-delegate (execution records go to ~/.task-delegate/{task_id}/)
 bash "$TASK_LAUNCH" \
   "$TASK_ID" \
@@ -85,7 +108,8 @@ bash "$TASK_LAUNCH" \
   --extra-record "$EXTRA_RECORD" \
   --done-marker "PANEL_DONE" \
   $FALLBACK_ARG \
-  $SOURCE_ARG
+  $SOURCE_ARG \
+  $RESUME_ARG
 
 # Output task_id for manifest tracking
 echo ""

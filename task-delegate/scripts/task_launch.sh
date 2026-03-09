@@ -9,6 +9,7 @@
 #   --budget N                            Budget cap (default: 10.00)
 #   --task-dir DIR                        Override task directory (default: ~/.task-delegate/<task_id>)
 #   --session NAME                        Override tmux session name (default: task-<task_id>)
+#   --resume-session SESSION_ID           Resume a prior backend session instead of starting fresh
 #   --fallback BACKEND                    Fallback backend if primary unavailable
 #   --post-run SCRIPT                     Script to run after backend completes (in-session, receives task_dir as $1)
 #   --extra-record JSON                   Extra JSON fields to merge into execution_record.json
@@ -40,6 +41,7 @@ DONE_MARKER_FAIL="TASK_FAIL"
 ROLE=""
 SOURCE_CONV=""
 TRACE=false
+RESUME_SESSION=""
 
 shift 2
 while [[ $# -gt 0 ]]; do
@@ -55,6 +57,7 @@ while [[ $# -gt 0 ]]; do
     --done-marker) DONE_MARKER_OK="$2"; DONE_MARKER_FAIL="${2}_FAIL"; shift 2 ;;
     --role) ROLE="$2"; shift 2 ;;
     --source) SOURCE_CONV="$2"; shift 2 ;;
+    --resume-session) RESUME_SESSION="$2"; shift 2 ;;
     --trace) TRACE=true; shift ;;
     *) echo "Unknown arg: $1"; exit 1 ;;
   esac
@@ -130,6 +133,7 @@ EXTRA_RECORD="${9:-}"
 ROLE="${10:-}"
 SOURCE_CONV="${11:-}"
 TRACE="${12:-false}"
+RESUME_SESSION="${13:-}"
 
 PROMPT_FILE="${TASK_DIR}/prompt.txt"
 LIVE_LOG="${TASK_DIR}/live.log"
@@ -141,11 +145,16 @@ cd "$PROJECT_DIR"
 echo "[task-launch] Starting backend: ${BACKEND}" | tee -a "$LIVE_LOG"
 echo "[task-launch] Project: ${PROJECT_DIR}" | tee -a "$LIVE_LOG"
 echo "[task-launch] Prompt: ${PROMPT_FILE}" | tee -a "$LIVE_LOG"
+[[ -n "$RESUME_SESSION" ]] && echo "[task-launch] Resume session: ${RESUME_SESSION}" | tee -a "$LIVE_LOG"
 echo "[task-launch] Time: $(date -Iseconds)" | tee -a "$LIVE_LOG"
 echo "---" | tee -a "$LIVE_LOG"
 
+# Record prompt size
+PROMPT_BYTES=$(wc -c < "$PROMPT_FILE" 2>/dev/null || echo 0)
+
 START_TS=$(date +%s)
 EXIT_CODE=0
+BACKEND_SESSION_ID=""
 
 case "$BACKEND" in
   cc)
@@ -153,23 +162,44 @@ case "$BACKEND" in
     if [[ "$API_BILLING" == "true" ]]; then
       CC_CMD+=(--max-budget-usd "$BUDGET")
     fi
+    # Session resume: use --resume instead of starting fresh
+    if [[ -n "$RESUME_SESSION" ]]; then
+      CC_CMD+=(--resume "$RESUME_SESSION")
+    fi
     if cat "$PROMPT_FILE" | "${CC_CMD[@]}" 2>&1 | tee -a "$LIVE_LOG"; then
       STATUS="success"
     else
       EXIT_CODE=$?
       STATUS="failed"
     fi
+    # Extract session_id from stream-json output
+    BACKEND_SESSION_ID=$(grep -o '"session_id":"[^"]*"' "$LIVE_LOG" | head -1 | cut -d'"' -f4 || true)
     ;;
   codex)
-    PROMPT_CONTENT=$(cat "$PROMPT_FILE")
-    if codex exec --skip-git-repo-check \
-        -c 'sandbox_permissions=["disk-full-read-access","disk-write"]' \
-        "$PROMPT_CONTENT" 2>&1 | tee -a "$LIVE_LOG"; then
-      STATUS="success"
+    # Use STDIN pipe (codex exec -) to avoid ARG_MAX limit on large prompts
+    if [[ -n "$RESUME_SESSION" ]]; then
+      # Session resume: send new prompt to existing session
+      if cat "$PROMPT_FILE" | codex exec resume "$RESUME_SESSION" - --skip-git-repo-check \
+          -c 'sandbox_permissions=["disk-full-read-access","disk-write"]' \
+          2>&1 | tee -a "$LIVE_LOG"; then
+        STATUS="success"
+      else
+        EXIT_CODE=$?
+        STATUS="failed"
+      fi
     else
-      EXIT_CODE=$?
-      STATUS="failed"
+      # Fresh session: pipe prompt via STDIN
+      if cat "$PROMPT_FILE" | codex exec - --skip-git-repo-check \
+          -c 'sandbox_permissions=["disk-full-read-access","disk-write"]' \
+          2>&1 | tee -a "$LIVE_LOG"; then
+        STATUS="success"
+      else
+        EXIT_CODE=$?
+        STATUS="failed"
+      fi
     fi
+    # Extract session_id from codex output (if present)
+    BACKEND_SESSION_ID=$(grep -oP 'session id: \K[0-9a-f-]+' "$LIVE_LOG" | head -1 || true)
     ;;
   gemini)
     PROMPT_CONTENT=$(cat "$PROMPT_FILE")
@@ -236,6 +266,8 @@ echo "[task-launch] Exit code: ${EXIT_CODE}" | tee -a "$LIVE_LOG"
 OPT_FIELDS=""
 [[ -n "$ROLE" ]] && OPT_FIELDS="${OPT_FIELDS}  \"role\": \"${ROLE}\",\n"
 [[ -n "$SOURCE_CONV" ]] && OPT_FIELDS="${OPT_FIELDS}  \"source_conversation\": \"${SOURCE_CONV}\",\n"
+[[ -n "$BACKEND_SESSION_ID" ]] && OPT_FIELDS="${OPT_FIELDS}  \"session_id\": \"${BACKEND_SESSION_ID}\",\n"
+[[ -n "$RESUME_SESSION" ]] && OPT_FIELDS="${OPT_FIELDS}  \"resumed_from\": \"${RESUME_SESSION}\",\n"
 
 cat > "$EXEC_RECORD" <<EOF
 {
@@ -248,6 +280,7 @@ $(echo -e "$OPT_FIELDS")  "project": "${PROJECT_DIR}",
   "started_at": "$(date -d @${START_TS} -Iseconds)",
   "finished_at": "$(date -Iseconds)",
   "prompt_file": "${PROMPT_FILE}",
+  "prompt_bytes": ${PROMPT_BYTES},
   "api_billing": ${API_BILLING},
   "live_log": "${LIVE_LOG}"
 }
@@ -307,7 +340,7 @@ sleep 0.5
 # Escape extra_record for shell argument passing
 EXTRA_RECORD_ESC="${EXTRA_RECORD//\"/\\\"}"
 
-tmux send-keys -t "$SESSION" "bash ${RUNNER} '${TASK_DIR}' '${PROJECT_DIR}' '${BACKEND}' '${API_BILLING}' '${BUDGET}' '${DONE_MARKER_OK}' '${DONE_MARKER_FAIL}' '${POST_RUN}' '${EXTRA_RECORD_ESC}' '${ROLE}' '${SOURCE_CONV}' '${TRACE}'" Enter
+tmux send-keys -t "$SESSION" "bash ${RUNNER} '${TASK_DIR}' '${PROJECT_DIR}' '${BACKEND}' '${API_BILLING}' '${BUDGET}' '${DONE_MARKER_OK}' '${DONE_MARKER_FAIL}' '${POST_RUN}' '${EXTRA_RECORD_ESC}' '${ROLE}' '${SOURCE_CONV}' '${TRACE}' '${RESUME_SESSION}'" Enter
 
 echo ""
 if [[ -n "$FALLBACK_USED" ]]; then
