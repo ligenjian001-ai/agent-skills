@@ -39,6 +39,8 @@ graph TB
         TD["task-delegate<br/>统一 dispatch"]
         PD["panel-discussion<br/>多角色辩论"]
         BI["bug-investigation<br/>双分析师诊断"]
+        DA["deep-analysis<br/>多维度系统分析"]
+        SD["system-design<br/>详细系统设计"]
     end
 
     subgraph "🔧 后端"
@@ -59,6 +61,8 @@ graph TB
         IPC1["~/.task-delegate/"]
         IPC2["~/.panel-discussions/"]
         IPC3["brain/{conv}/"]
+        IPC4["~/.deep-analysis/"]
+        IPC5["~/.system-design/"]
     end
 
     U --> AG
@@ -67,12 +71,17 @@ graph TB
     TD -->|launch| CC & CDX & GEM & DS
     PD -->|wrapper| TD
     BI -->|wrapper| TD
+    DA -->|wrapper| TD
+    SD -->|wrapper| TD
+    DA -->|system_map| SD
     TD -->|写入| IPC1
     PD -->|编排数据| IPC2
     ARC -->|journal| IPC3
+    DA -->|分析| IPC4
+    SD -->|设计| IPC5
     DR -.->|读取| IPC1 & IPC2 & IPC3
     AG --> BU & JK & IR
-    TD & PD & BI & JK & BU -->|终端| TMUX
+    TD & PD & BI & DA & SD & JK & BU -->|终端| TMUX
 ```
 
 ### 数据流
@@ -82,6 +91,8 @@ graph TB
 | `~/.task-delegate/` | 所有 subagent 执行记录（Single Source of Truth） | task-delegate | daily-report, ag-archive, ag_retro.py |
 | `~/.panel-discussions/` | Panel 编排数据（topic, summary, manifest） | panel-discussion | daily-report |
 | `~/.bug-investigations/` | Bug 调查编排数据（context, verdict） | bug-investigation | daily-report |
+| `~/.deep-analysis/` | 多维度分析数据（aspects, analyst/challenger 输出, system_map） | deep-analysis | system-design, daily-report |
+| `~/.system-design/` | 设计数据（sketch, decide, spike, blueprint） | system-design | infra-request, daily-report |
 | `brain/{conv_id}/` | 对话 journal + subagent tracking | ag-archive | daily-report |
 
 **双向链接**：`execution_record.json` 的 `source_conversation` → `brain/{conv_id}/`，journal 的 `[subagent]` tag → `~/.task-delegate/{task_id}/`
@@ -100,9 +111,11 @@ graph TB
 
 | Skill | Description |
 |-------|-------------|
-| [task-delegate](task-delegate/) | 统一任务委派 — prompt, launch, monitor, verify (CC/Codex/Gemini/DeepSeek) |
+| [task-delegate](task-delegate/) | 统一任务委派 — prompt, launch, monitor, verify, extract (CC/Codex/Gemini/DeepSeek) |
 | [agent-panel-discussion](agent-panel-discussion/) | 多角色辩论 — 怀疑/务实/乐观三方辩论，多轮反驳 + 信心评分 |
 | [bug-investigation](bug-investigation/) | Bug 调查 — CC + Codex 双分析师独立诊断，AG 综合裁决 |
+| [deep-analysis](deep-analysis/) | 多维度系统分析 — 问题驱动 aspect 发现 + Analyst/Challenger 双 agent 对抗 |
+| [system-design](system-design/) | 详细系统设计 — 三视角 Sketch + 收敛 + Spike 验证 + Blueprint |
 
 ### 记录分析
 
@@ -125,7 +138,11 @@ graph TB
 |---------|------|
 | `panel-discussion` → `task-delegate` | panel_launch.sh 是 task_launch.sh 的 thin wrapper |
 | `bug-investigation` → `task-delegate` | inv_launch.sh 是 task_launch.sh 的 thin wrapper |
+| `deep-analysis` → `task-delegate` | Analyst/Challenger agent 通过 task-delegate dispatch |
+| `system-design` → `task-delegate` | Architect/Realist/Explorer agent 通过 task-delegate dispatch |
+| `deep-analysis` → `system-design` | system_map.md 作为 system-design 的输入（可选、可组合） |
+| `system-design` → `infra-request` | Blueprint 的 infra_requests/ 可直接提交 GitHub Issues |
 | `ag-archive` → `task-delegate` | journal `[subagent]` tag 通过 task_id 关联执行记录 |
-| `daily-report` → `ag-archive` + `task-delegate` + `panel-discussion` | 扫描 3 个 IPC 目录生成日报 |
+| `daily-report` → `ag-archive` + `task-delegate` + `panel-discussion` | 扫描 IPC 目录生成日报 |
 | `all terminal skills` → `tmux-protocol` | 所有涉及终端的操作必须遵循 tmux 协议 |
 | `all skills` → `skill-creator` | 文档标准：SKILL.md (agent) + README.md (human) |
