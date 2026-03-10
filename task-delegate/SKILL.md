@@ -105,23 +105,35 @@ The launcher:
 ### Step 3: Active Monitoring Loop (AG — MANDATORY, INLINE)
 
 > [!CAUTION]
-> AG MUST actively monitor the backend **immediately after launch** and stay engaged until completion.
-> **"Dispatch and forget" is the #1 anti-pattern.** AG's job is NOT done after `task_launch.sh` returns.
+> **DO NOT YIELD AFTER LAUNCH.**
+> AG 在 launch 后必须**在同一个 turn 内**开始第一次 polling。
+> 不可以发完通知就停下来等用户响应。
+> "我会持续监控" 不是承诺 — 是 AG 必须**立刻兑现**的行动。
 
 **AG的完整职责**：Launch → Monitor → Extract → Verify → Follow-up。缺少任何一步都算失败。
 
-#### 3a. Notify User + Start Monitoring
-
-Launch 后立刻告知用户并开始监控：
+**正确的行为模式**：
 
 ```
-📋 任务已启动: {task_id}
-🔧 后端: {backend}
-⏱  预计耗时: {AG's estimate}
+1. task_launch.sh 完成
+2. 立刻 view_file live.log（第一次 poll，30s 后）
+3. 检查进度 → 再次 view_file（60s 间隔）
+4. 重复直到 execution_record.json 出现
+5. 然后执行 Step 4（Extract + Verify）
+6. 最后用 notify_user 向用户汇报结果
 
-我会持续监控执行情况。你也可以：
-  tmux attach -t task-{task_id}    ← 实时观看
-  Ctrl+B 然后 D                    ← 退出观看（不中断任务）
+期间可以用 notify_user 告知用户任务已启动 + 如何观看，
+但 AG 不能在 notify_user 之后停止 — 必须继续 polling。
+```
+
+#### 3a. Launch Notification（嵌入，不是独立步骤）
+
+向用户发一条简短通知（但**不要停在这里**）：
+
+```
+📋 任务已启动: {task_id} 🔧 后端: {backend} ⏱ 预计耗时: {estimate}
+实时观看: tmux attach -t task-{task_id} (Ctrl+B D 退出)
+我会持续监控执行情况，完成后自动验证并汇报。
 ```
 
 #### 3b. Polling Loop
