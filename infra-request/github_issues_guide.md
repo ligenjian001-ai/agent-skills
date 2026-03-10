@@ -2,9 +2,9 @@
 
 ## 背景
 
-当你在研究或操作中发现 SDK 缺陷、功能缺失或工具需求时，通过 **GitHub Issues** 向 Antigravity（SDK 基础设施 agent）提报 infra request。
+当你在研究或操作中发现缺陷、功能缺失或工具需求时，通过 **GitHub Issues** 向 Antigravity（基础设施 agent）提报 infra request。
 
-**所有项目统一提交到 `ligenjian001-ai/hft-sdk-issues`**。
+**所有项目统一提交到 `$GITHUB_ISSUES_REPO`**（默认 `ligenjian001-ai/hft-sdk-issues`），通过 **project label** 区分项目来源。
 
 ## 配置
 
@@ -19,8 +19,8 @@ GITHUB_ISSUES_REPO=ligenjian001-ai/hft-sdk-issues
 ## 核心命令
 
 ```bash
-# 发起 infra request
-playground issues post "<标题>" "<正文>" --label <类型> --label <优先级>
+# 发起 infra request（必须加 project label）
+playground issues post "<标题>" "<正文>" --label <类型> --label <优先级> --label project:<project>
 
 # 查看所有 open issues
 playground issues list
@@ -41,6 +41,18 @@ playground issues status <issue_number> <状态>
 playground issues close <issue_number>
 ```
 
+## 项目标签（MANDATORY）
+
+**每个 issue 必须打 `project:<name>` label**：
+
+| Label | 项目 | 典型 issue 类型 |
+|-------|------|-----------------|
+| `project:hft_build` | HFT SDK 基建 | SDK 工具、数据管道、策略基建 |
+| `project:workstation-ops` | 工作站运维 | 环境配置、依赖管理、系统服务 |
+| `project:data` | 数据基建（预留） | 数据源、ETL、存储 |
+
+用户后续可能将 issue 分发到不同 repo，project label 是路由依据。
+
 ## 提报模板
 
 ### 标题规范
@@ -48,6 +60,7 @@ playground issues close <issue_number>
 - `[INFRA] xxx` — SDK 基础设施需求 (对应 `--label infra`)
 - `[BUG] xxx` — Bug 报告 (对应 `--label bug`)
 - `[FEATURE] xxx` — 新功能 (对应 `--label feature`)
+- `[OPS] xxx` — 工作站运维/环境配置 (对应 `--label ops`)
 
 ### 正文模板
 
@@ -78,6 +91,16 @@ playground issues close <issue_number>
 **Immediate blocker**: {什么流程被阻塞}
 **Impact**: {如何影响日常操作}
 
+## Environment Context (workstation-ops / 环境配置类)
+
+> 仅当 issue 涉及机器环境、依赖安装、系统配置时需要填写。
+
+**Target Machine**: {hostname / IP / "all workstations"}
+**OS**: {Ubuntu 22.04 / CentOS 8 / etc.}
+**Dependencies**: {需要安装的包/工具列表}
+**Config Files**: {涉及的配置文件路径}
+**Rollback Plan**: {配置失败时的回滚方案}
+
 ## Current Behavior (Bug only)
 
 {Bug 报告：当前的错误行为，包含复现步骤}
@@ -88,7 +111,7 @@ playground issues close <issue_number>
 
 ## Files Involved
 
-- {涉及的 SDK 文件路径}
+- {涉及的文件路径}
 
 ## Verification Criteria
 

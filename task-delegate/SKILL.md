@@ -249,6 +249,27 @@ bash /home/lgj/agent-skills/task-delegate/scripts/task_launch.sh \
 └── execution_record.json   ← Completion metadata
 ```
 
+### Extracting Backend Output
+
+Use `task_extract.sh` to get clean text from `live.log` (which is stream-JSON format):
+
+```bash
+# Extract all assistant text to stdout
+bash /home/lgj/agent-skills/task-delegate/scripts/task_extract.sh {task_id}
+
+# Save to file
+bash /home/lgj/agent-skills/task-delegate/scripts/task_extract.sh {task_id} \
+  --output-file /path/to/output.md
+
+# Extract only the final result (faster, deduped)
+bash /home/lgj/agent-skills/task-delegate/scripts/task_extract.sh {task_id} \
+  --result-only
+```
+
+> [!NOTE]
+> `live.log` contains very long JSON lines (50K+ chars). Do NOT use `bash read` or `jq` line-by-line — they truncate.
+> `task_extract.sh` uses Python's `json` module for reliable parsing.
+
 ### execution_record.json Schema
 
 ```json

@@ -1,6 +1,6 @@
 ---
 name: infra-request
-description: MANDATORY when filing infra requests. Covers GitHub Issues submission (playground issues post), idempotency guard, post-submit 3-step verification, Tool Integration Plan, and Self-Verification Guide. All requests go to ligenjian001-ai/hft-sdk-issues.
+description: MANDATORY when filing infra requests. Covers GitHub Issues submission (playground issues post), idempotency guard, post-submit 3-step verification, project-aware labeling, Tool Integration Plan, and Self-Verification Guide.
 ---
 
 # Infra Request Skill
@@ -10,12 +10,12 @@ description: MANDATORY when filing infra requests. Covers GitHub Issues submissi
 ## Submission Method: GitHub Issues (Primary)
 
 > [!IMPORTANT]
-> Infra requests are submitted via **GitHub Issues** to `ligenjian001-ai/hft-sdk-issues`.
+> Infra requests are submitted via **GitHub Issues** to `$GITHUB_ISSUES_REPO`（默认 `ligenjian001-ai/hft-sdk-issues`）。
 > See `github_issues_guide.md` in this skill directory for full template, labels, and status flow.
 
 ```bash
-# Submit new request
-playground issues post "[TYPE] 标题" "正文..." --label <type> --label <priority>
+# Submit new request（AG 自动加 project label）
+playground issues post "[TYPE] 标题" "正文..." --label <type> --label <priority> --label project:<project>
 
 # Check existing issues
 playground issues list
@@ -25,6 +25,24 @@ playground issues read <N>
 playground issues reply <N> "..."
 playground issues close <N>
 ```
+
+## Project Label（MANDATORY）
+
+> [!IMPORTANT]
+> **每个 issue 必须打 `project:<name>` label**，用于区分项目来源。
+> 用户后续可能将 issue 分发到不同 repo，project label 是路由依据。
+
+| Label | 项目 | 典型 issue 类型 |
+|-------|------|-----------------|
+| `project:hft_build` | HFT SDK 基建 | SDK 工具、数据管道、策略基建 |
+| `project:workstation-ops` | 工作站运维 | 环境配置、依赖管理、系统服务 |
+| `project:data` | 数据基建（预留） | 数据源、ETL、存储 |
+
+**AG 判断规则**：根据 issue 内容判断所属项目，不需要用户显式指定。判断依据：
+
+- 涉及 SDK API / 策略工具 / playground CLI → `project:hft_build`
+- 涉及机器环境 / 依赖安装 / 系统配置 / 服务部署 → `project:workstation-ops`
+- 不确定时，标注为用户最近工作的项目
 
 ## ⚠️ Idempotency Guard (MANDATORY for Issue Creation)
 
@@ -151,6 +169,7 @@ To claim **"✅ Verified"**, you MUST:
 **Date**: {YYYY-MM-DD}
 **Priority**: {🔴 High / 🟡 Medium / 🟢 Low}
 **Type**: {Feature / Bug / Tool}
+**Project**: {hft_build / workstation-ops / data}
 **Status**: Pending
 
 ---
@@ -178,6 +197,16 @@ To claim **"✅ Verified"**, you MUST:
 ### Deliverable 2: {Next Tool} (P0/P1/P2)
 
 {Repeat for each tool needed}
+
+## Environment Context (workstation-ops / 环境配置类)
+
+> 仅当 issue 涉及机器环境、依赖安装、系统配置时需要填写此段。
+
+**Target Machine**: {hostname / IP / "all workstations"}
+**OS**: {Ubuntu 22.04 / CentOS 8 / etc.}
+**Dependencies**: {需要安装的包/工具列表}
+**Config Files**: {涉及的配置文件路径}
+**Rollback Plan**: {配置失败时的回滚方案}
 
 ## Why I Need This
 

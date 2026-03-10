@@ -38,6 +38,7 @@ graph TB
     subgraph "⚡ 执行层"
         TD["task-delegate<br/>统一 dispatch"]
         PD["panel-discussion<br/>多角色辩论"]
+        BI["bug-investigation<br/>双分析师诊断"]
     end
 
     subgraph "🔧 后端"
@@ -65,12 +66,13 @@ graph TB
     AG -->|记录| ARC
     TD -->|launch| CC & CDX & GEM & DS
     PD -->|wrapper| TD
+    BI -->|wrapper| TD
     TD -->|写入| IPC1
     PD -->|编排数据| IPC2
     ARC -->|journal| IPC3
     DR -.->|读取| IPC1 & IPC2 & IPC3
     AG --> BU & JK & IR
-    TD & PD & JK & BU -->|终端| TMUX
+    TD & PD & BI & JK & BU -->|终端| TMUX
 ```
 
 ### 数据流
@@ -79,6 +81,7 @@ graph TB
 |------|------|--------|--------|
 | `~/.task-delegate/` | 所有 subagent 执行记录（Single Source of Truth） | task-delegate | daily-report, ag-archive, ag_retro.py |
 | `~/.panel-discussions/` | Panel 编排数据（topic, summary, manifest） | panel-discussion | daily-report |
+| `~/.bug-investigations/` | Bug 调查编排数据（context, verdict） | bug-investigation | daily-report |
 | `brain/{conv_id}/` | 对话 journal + subagent tracking | ag-archive | daily-report |
 
 **双向链接**：`execution_record.json` 的 `source_conversation` → `brain/{conv_id}/`，journal 的 `[subagent]` tag → `~/.task-delegate/{task_id}/`
@@ -99,6 +102,7 @@ graph TB
 |-------|-------------|
 | [task-delegate](task-delegate/) | 统一任务委派 — prompt, launch, monitor, verify (CC/Codex/Gemini/DeepSeek) |
 | [agent-panel-discussion](agent-panel-discussion/) | 多角色辩论 — 怀疑/务实/乐观三方辩论，多轮反驳 + 信心评分 |
+| [bug-investigation](bug-investigation/) | Bug 调查 — CC + Codex 双分析师独立诊断，AG 综合裁决 |
 
 ### 记录分析
 
@@ -120,6 +124,7 @@ graph TB
 | 协作模式 | 说明 |
 |---------|------|
 | `panel-discussion` → `task-delegate` | panel_launch.sh 是 task_launch.sh 的 thin wrapper |
+| `bug-investigation` → `task-delegate` | inv_launch.sh 是 task_launch.sh 的 thin wrapper |
 | `ag-archive` → `task-delegate` | journal `[subagent]` tag 通过 task_id 关联执行记录 |
 | `daily-report` → `ag-archive` + `task-delegate` + `panel-discussion` | 扫描 3 个 IPC 目录生成日报 |
 | `all terminal skills` → `tmux-protocol` | 所有涉及终端的操作必须遵循 tmux 协议 |

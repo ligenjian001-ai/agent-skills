@@ -43,13 +43,13 @@ fi
 
 TOPIC=$(cat "${TASK_DIR}/topic.txt")
 
-# Get previous round summary FILE PATH for rebuttals (not content — backend reads on demand)
-PREV_SUMMARY_FILE=""
+# Get previous round summary CONTENT for rebuttals (inlined into prompts)
+PREV_SUMMARY_CONTENT=""
 if [[ "$ROUND_NUM" -gt 0 ]]; then
   PREV_ROUND=$((ROUND_NUM - 1))
   PREV_FILE="${TASK_DIR}/round_${PREV_ROUND}_summary.md"
   if [[ -f "$PREV_FILE" ]]; then
-    PREV_SUMMARY_FILE="$PREV_FILE"
+    PREV_SUMMARY_CONTENT=$(cat "$PREV_FILE")
   else
     echo "WARN: Previous round summary not found: ${PREV_FILE}" >&2
   fi
@@ -75,19 +75,17 @@ for agent in skeptic pragmatist optimist; do
     echo "---"
     echo ""
 
-    # Reference discussion topic as file path (backend reads on demand)
+    # Inline discussion topic content directly (Codex agents cannot read files without tools)
     echo "# 讨论主题"
     echo ""
-    echo "Read the discussion topic from this file:"
-    echo "  ${TASK_DIR}/topic.txt"
+    echo "$TOPIC"
     echo ""
 
-    # For rebuttals, reference previous round summary as file path
-    if [[ "$ROUND_NUM" -gt 0 && -n "$PREV_SUMMARY_FILE" ]]; then
+    # For rebuttals, inline previous round summary content
+    if [[ "$ROUND_NUM" -gt 0 && -n "$PREV_SUMMARY_CONTENT" ]]; then
       echo "# 上一轮讨论内容"
       echo ""
-      echo "Read the previous round's discussion from this file:"
-      echo "  ${PREV_SUMMARY_FILE}"
+      echo "$PREV_SUMMARY_CONTENT"
       echo ""
       echo "# 你的任务"
       echo ""

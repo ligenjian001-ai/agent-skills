@@ -15,12 +15,17 @@ description: MANDATORY terminal command protocol via tmux with PS1-based automat
 Derive session ID from artifact directory path, e.g. `brain/ffe43b43-...` → `ffe43b43`.
 
 ```bash
-tmux kill-session -t {id} 2>/dev/null; tmux new-session -d -s {id} -x 200 -y 50
+bash /home/lgj/agent-skills/tmux-protocol/scripts/init_session.sh {id}
 ```
 
 - `SafeToAutoRun=true`
 - `WaitMsBeforeAsync=3000`
 - `waitForPreviousTools=true`
+
+> [!CAUTION]
+> **ALWAYS use `init_session.sh`** — NEVER run bare `tmux new-session` directly.
+> Bare tmux commands produce no stdout → `run_command` backgrounds them → conversation hangs.
+> The script outputs `TMUX_SESSION_READY: {id}` so `run_command` completes normally.
 
 ## Shell Environment
 
