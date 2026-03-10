@@ -128,13 +128,21 @@ Launch 后立刻告知用户并开始监控：
 
 AG 必须周期性检查 `live.log` 直到任务完成或超时：
 
+> [!IMPORTANT]
+> **监控 = 读文件，不需要终端。** `live.log` 和 `execution_record.json` 是普通文件，
+> 用 `view_file` 读取即可。**只有 Ctrl+C 干预才需要终端。**
+> 这个区分至关重要 — 当 tmux 出问题时（如 user cancel 后），AG 仍然可以用 `view_file` 正常监控。
+
 ```
 首次检查: launch 后 30s
 后续间隔: 60s
-每次检查:
-  1. view_file ~/.task-delegate/{task_id}/live.log  (看最后 50 行)
-  2. 或 cat ~/.task-delegate/{task_id}/execution_record.json 2>/dev/null
+每次检查（优先用 view_file，不用终端）:
+  1. view_file("~/.task-delegate/{task_id}/live.log", StartLine=最后50行)
+  2. view_file("~/.task-delegate/{task_id}/execution_record.json")
      → 文件存在 = 任务已结束
+
+仅在需要干预时才用终端:
+  tmux send-keys -t task-{task_id} C-c   ← 这才需要终端
 ```
 
 **每次检查时 AG 必须评估：**
@@ -341,6 +349,10 @@ AG should still include critical context in `prompt.txt` because:
 
 ❌ Dispatch and forget — launch 后不再跟进
    → AG 必须执行完整的 Launch → Monitor → Extract → Verify → Follow-up 链路
+
+❌ 用终端（tmux/run_command）读 live.log 或 execution_record.json
+   → 这些是文件读取操作，用 view_file。终端只用于 Ctrl+C 干预
+   → 特别是 user cancel 后 tmux 可能卡住，但 view_file 不受影响
 
 ❌ Vague prompt: "fix the bugs"
    → MUST specify which files, what behavior is wrong, expected behavior

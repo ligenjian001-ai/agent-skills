@@ -147,8 +147,15 @@ If the user cancels a `run_command` mid-execution, subsequent `run_command` call
 
 1. ❌ Do NOT kill/recreate the tmux session (problem is not tmux)
 2. ❌ Do NOT retry `run_command` (execution layer lock is stuck)
-3. ✅ **Tell the user**: "Terminal execution may be broken after the cancel. Recommend starting a new conversation."
-4. ✅ Continue with non-terminal tools (`view_file`, `write_to_file`, `grep_search`, etc.)
+3. ❌ Do NOT bypass tmux with bare `run_command` to "read files quickly" — this is the #1 fallback anti-pattern
+4. ✅ **Use `view_file`** to read files (live.log, execution_record.json, etc.) — file reads don't need terminal
+5. ✅ **Tell the user**: "Terminal execution may be broken after the cancel. Recommend starting a new conversation."
+6. ✅ Continue with non-terminal tools (`view_file`, `write_to_file`, `grep_search`, etc.)
+
+> [!CAUTION]
+> **Fallback 冲动的根因**：AG 没有区分 "需要终端的操作"（如 send-keys, capture-pane）和 "只需读文件的操作"（如读 live.log）。
+> 监控 task-delegate 日志 **完全可以用 view_file**，根本不需要走终端。
+> 即使终端完全坏掉，AG 的监控能力也不应受影响。
 
 See `AG_TERMINAL_BEHAVIOR.md` Section 11 for full analysis.
 
