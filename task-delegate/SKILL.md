@@ -102,72 +102,60 @@ The launcher:
 - Streams output to `~/.task-delegate/{task_id}/live.log`
 - Writes `execution_record.json` on completion
 
-### Step 3: Tell User How to Monitor
+### Step 3: Active Monitoring Loop (AG — MANDATORY, INLINE)
 
-After launching, AG MUST give the user these monitoring commands:
+> [!CAUTION]
+> AG MUST actively monitor the backend **immediately after launch** and stay engaged until completion.
+> **"Dispatch and forget" is the #1 anti-pattern.** AG's job is NOT done after `task_launch.sh` returns.
+
+**AG的完整职责**：Launch → Monitor → Extract → Verify → Follow-up。缺少任何一步都算失败。
+
+#### 3a. Notify User + Start Monitoring
+
+Launch 后立刻告知用户并开始监控：
 
 ```
 📋 任务已启动: {task_id}
 🔧 后端: {backend}
 ⏱  预计耗时: {AG's estimate}
 
-监控方式（选一种）:
-
-1. 实时观看（推荐）:
-   tmux attach -t task-{task_id}
-   (按 Ctrl+B 然后按 D 退出观看，不会中断任务)
-
-2. 查看实时日志:
-   tail -f ~/.task-delegate/{task_id}/live.log
-
-3. 一键查看状态:
-   bash /home/lgj/agent-skills/task-delegate/scripts/task_monitor.sh {task_id}
-
-4. 中断任务（如果需要）:
-   tmux send-keys -t task-{task_id} C-c
-
-⚠️  完成后会显示 TASK_DONE / TASK_FAIL 标记。
-    完成后回来找我，我会 review diff 并验证结果。
+我会持续监控执行情况。你也可以：
+  tmux attach -t task-{task_id}    ← 实时观看
+  Ctrl+B 然后 D                    ← 退出观看（不中断任务）
 ```
 
-### Step 3.5: Runtime Monitoring (AG — MANDATORY)
+#### 3b. Polling Loop
 
-> [!IMPORTANT]
-> AG MUST actively monitor the backend's progress during execution.
-> Passive waiting is NOT acceptable.
+AG 必须周期性检查 `live.log` 直到任务完成或超时：
 
-**What to check in `live.log`:**
-
-1. **Correct paths** — backend didn't "correct" or change paths from the prompt
-2. **Correct tools/commands** — SSH hops, python paths, etc. match the prompt
-3. **Progress** — backend making forward progress or stuck/looping?
-4. **Error patterns** — permission denied, file not found, connection refused
-
-**Monitoring cadence**: 30s first check → 60s interval → read `live.log` each time
-
-```bash
-# Read live output (non-blocking)
-view_file ~/.task-delegate/{task_id}/live.log
+```
+首次检查: launch 后 30s
+后续间隔: 60s
+每次检查:
+  1. view_file ~/.task-delegate/{task_id}/live.log  (看最后 50 行)
+  2. 或 cat ~/.task-delegate/{task_id}/execution_record.json 2>/dev/null
+     → 文件存在 = 任务已结束
 ```
 
-#### Intervention — AG CAN interrupt backends
+**每次检查时 AG 必须评估：**
+
+| 检查项 | 正常 | 异常 → 行动 |
+|--------|------|-------------|
+| 方向正确？ | 路径/工具与 prompt 一致 | Ctrl+C → 改 prompt → 重新 launch |
+| 在推进？ | 有新输出 | 5 min 无输出 → Ctrl+C → 诊断 |
+| 无错误？ | 正常运行 | 重复报错 → Ctrl+C → 修底层问题 |
+| 未超时？ | 在预估时间内 | 超时 → Ctrl+C → 缩小范围或换后端 |
+
+#### 3c. Intervention
 
 ```bash
-# INTERRUPT: Send Ctrl+C to kill the backend process
+# 中断
 tmux send-keys -t task-{task_id} C-c
-
-# VERIFY: Confirm backend stopped
+# 确认停止
 tmux capture-pane -t task-{task_id} -p -S -5
 ```
 
-| Trigger | Action |
-| --- | --- |
-| **Wrong direction** — wrong paths, misunderstanding | Ctrl+C → improve prompt → re-launch |
-| **Stuck/looping** — no output for 5+ min | Ctrl+C → diagnose → re-launch or notify user |
-| **Error cascade** — repeated failures | Ctrl+C → fix underlying issue → re-launch |
-| **Budget concern** — simple task running too long | Ctrl+C → simplify prompt or use cheaper backend |
-
-#### Timeout policy
+#### Timeout Policy
 
 | Backend | Default timeout | Action on timeout |
 | --- | --- | --- |
@@ -176,9 +164,18 @@ tmux capture-pane -t task-{task_id} -p -S -5
 | Codex | 5 min | Ctrl+C → re-launch |
 | DeepSeek | 2 min | Check response, re-try |
 
-### Step 4: Post-Completion Verification (when user returns)
+### Step 4: Post-Completion (AG — MANDATORY, INLINE)
 
-When the user says the backend is done, or AG detects completion:
+任务完成后 AG **立即执行**（不等用户指示）：
+
+#### 4a. Extract Output
+
+```bash
+bash /home/lgj/agent-skills/task-delegate/scripts/task_extract.sh \
+  {task_id} --output-file ~/.task-delegate/{task_id}/output.md
+```
+
+#### 4b. Verify
 
 1. **Check completion status**:
 
@@ -186,23 +183,43 @@ When the user says the backend is done, or AG detects completion:
    cat ~/.task-delegate/{task_id}/execution_record.json
    ```
 
-2. **Review changes** (for code tasks):
+2. **Read extracted output** — AG 必须理解 subagent 做了什么
+
+3. **Review changes** (for code tasks):
 
    ```bash
    cd {project_dir} && git diff --stat
-   cd {project_dir} && git diff
    ```
 
-3. **Run tests**:
+4. **Run tests** (if applicable):
 
    ```bash
    # Run the same self-test from prompt.txt
    ```
 
-4. **Report to user**: summarize what the backend did, what passed, what needs attention.
-
 > [!CAUTION]
 > **NEVER trust backend self-test alone.** AG MUST independently verify.
+> **NEVER report "task done" without reading the output.** AG must understand what was produced.
+
+#### 4c. Report to User
+
+AG 向用户汇报：
+
+- subagent 做了什么（关键产出摘要）
+- 验证结果（通过/部分通过/失败）
+- 发现的问题或值得注意的点
+
+### Step 5: Follow-up（AG — MANDATORY）
+
+AG 必须主动识别后续行动：
+
+- **Output 需要进一步处理？** — 如 Analyst 输出需要 Challenger 复审
+- **有 TODO 或遗留问题？** — 从 subagent 输出中提取
+- **结果需要集成到其他产物？** — 如写入 system_map.md、更新 task.md
+- **需要启动下一个任务？** — 如 spike 验证、后续实现
+
+> [!IMPORTANT]
+> AG 的工作在 **用户确认后续方向** 后才算完成，不是 subagent 退出就算完成。
 
 ## Backend CLI Reference
 
@@ -322,6 +339,9 @@ AG should still include critical context in `prompt.txt` because:
 ❌ AG writes the code itself instead of delegating
    → If user asked for delegation, use a backend
 
+❌ Dispatch and forget — launch 后不再跟进
+   → AG 必须执行完整的 Launch → Monitor → Extract → Verify → Follow-up 链路
+
 ❌ Vague prompt: "fix the bugs"
    → MUST specify which files, what behavior is wrong, expected behavior
 
@@ -329,13 +349,13 @@ AG should still include critical context in `prompt.txt` because:
    → ALWAYS use dedicated task-{task_id} session
 
 ❌ Forgetting to tell user how to monitor
-   → Step 3 is MANDATORY, not optional
+   → Step 3a is MANDATORY, not optional
 
-❌ Not reviewing backend's output after completion
-   → Step 4 is MANDATORY — backends make mistakes, AG must verify
+❌ Not reading backend's output after completion
+   → Step 4b requires AG to read and understand the extracted output
 
-❌ Using --max-budget-usd on CC Max subscription
-   → Unnecessary, may prematurely terminate the task
+❌ Reporting "task done" without verification
+   → Step 4b-4c: AG must independently verify before reporting
 ```
 
 ## Troubleshooting
