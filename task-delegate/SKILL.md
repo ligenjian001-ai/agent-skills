@@ -34,27 +34,29 @@ description: Delegate tasks to any backend (CC, Codex, Gemini, DeepSeek). AG act
 
 Write `~/.task-delegate/{task_id}/prompt.txt` — this is the ENTIRE context the backend will receive.
 
-**A good prompt MUST include:**
+> [!IMPORTANT]
+> **核心原则：传递 WHAT + WHERE，不传递 HOW。**
+> CC/Codex/Gemini 本身有极强的代码理解和方案设计能力。
+> AG 的职责是清晰定义**目标**和提供**必要上下文**，而不是替 executor 设计实现方案。
+> 过度指定实现细节 = 浪费 AG 上下文 + 限制 executor 发挥 + 增加走偏风险。
+
+**Prompt 模板（轻量级）：**
 
 ```markdown
 # Task: {one-line description}
 
+## Objective
+{用户的原始需求，用 AG 的理解清晰重述。}
+{重点说清楚「要达成什么效果」，而不是「怎么实现」。}
+
 ## Context
 - Project root: {absolute path}
-- Key files: {list relevant files with brief descriptions}
-- Tech stack: {languages, frameworks, build tools}
+- Key files: {仅列出与任务直接相关的文件，附一句话说明其作用}
+- {如有 CLAUDE.md / GEMINI.md，提醒 executor 自行阅读}
 
-## Requirements
-{Detailed task description from user, expanded with AG's understanding}
-
-## Constraints
-- Do NOT modify: {files/modules that are off-limits}
-- Follow existing code style in {reference file}
-- {Any other constraints}
-
-## Success Criteria
-- [ ] {Specific, verifiable criterion 1}
-- [ ] {Specific, verifiable criterion 2}
+## Constraints (仅列出 executor 无法自行推断的约束)
+- Do NOT modify: {明确禁止修改的文件/模块}
+- {用户明确提出的非功能性要求，如性能、兼容性}
 
 ## Self-Test
 After completing changes, run:
@@ -64,15 +66,22 @@ After completing changes, run:
 
 ```
 Ensure all tests pass before finishing.
-
-## Project Knowledge
-{Paste content from CLAUDE.md / GEMINI.md if it exists, or key project conventions}
 ```
 
+**什么该写、什么不该写：**
+
+| ✅ AG 应该提供 | ❌ AG 不应该提供 |
+|--------------|----------------|
+| 用户的原始需求和意图 | 具体的代码修改方案 |
+| 项目根目录和关键文件位置 | 详细的函数签名设计 |
+| 明确的禁止修改区域 | 文件级别的实现步骤 |
+| 验证命令（test/build） | 代码风格的逐条规范（executor 会自己看） |
+| executor 无法自行获取的背景知识 | 能从代码中读出来的技术栈信息 |
+
 > [!CAUTION]
-> **Prompt quality = task outcome.** The backend has ZERO prior context about the project.
-> A vague prompt like "add authentication" will fail. AG MUST provide the full picture.
-> Spend 2-5 minutes on prompt prep — it saves 30min+ of the backend wandering.
+> **Prompt 不是设计文档。** Executor 会自己读代码、理解架构、设计方案。
+> AG 写得越多，executor 越容易被 AG 的错误假设带偏。
+> **信任 executor 的理解力** — 它是 builder，AG 是 orchestrator。
 
 **Task ID convention**: `YYYYMMDD_HHMM_{short_desc}` e.g. `20260305_0200_auth_refactor` — timestamp first for sortability
 
@@ -110,20 +119,22 @@ The launcher:
 > 不可以发完通知就停下来等用户响应。
 > "我会持续监控" 不是承诺 — 是 AG 必须**立刻兑现**的行动。
 
-**AG的完整职责**：Launch → Monitor → Extract → Verify → Follow-up。缺少任何一步都算失败。
+**AG的完整职责**：Launch → Monitor+播报 → Extract → Verify → Follow-up。缺少任何一步都算失败。
 
 **正确的行为模式**：
 
 ```
 1. task_launch.sh 完成
 2. 立刻 view_file live.log（第一次 poll，30s 后）
-3. 检查进度 → 再次 view_file（60s 间隔）
-4. 重复直到 execution_record.json 出现
-5. 然后执行 Step 4（Extract + Verify）
-6. 最后用 notify_user 向用户汇报结果
+3. 从 live.log 内容中提取简要进度 → 在对话中直接输出进度摘要
+4. 更新 task_boundary（TaskStatus = 进度摘要）
+5. 再次 view_file live.log（60-90s 间隔）
+6. 重复 3-5 直到 execution_record.json 出现
+7. 然后执行 Step 4（Extract + Verify）
+8. 最后用 notify_user 向用户汇报最终结果
 
-期间可以用 notify_user 告知用户任务已启动 + 如何观看，
-但 AG 不能在 notify_user 之后停止 — 必须继续 polling。
+整个 Monitor 阶段在同一个 turn 内完成，不 yield 控制权。
+AG 通过 task_boundary 更新 TaskStatus + 对话中输出文字来播报。
 ```
 
 #### 3a. Launch Notification（嵌入，不是独立步骤）
@@ -133,38 +144,83 @@ The launcher:
 ```
 📋 任务已启动: {task_id} 🔧 后端: {backend} ⏱ 预计耗时: {estimate}
 实时观看: tmux attach -t task-{task_id} (Ctrl+B D 退出)
-我会持续监控执行情况，完成后自动验证并汇报。
+我会持续监控执行情况，每轮读取 live.log 并在对话中播报进度。
 ```
 
-#### 3b. Polling Loop
+#### 3b. Polling + 播报 Loop
 
-AG 必须周期性检查 `live.log` 直到任务完成或超时：
+AG 必须周期性检查 `live.log` 并**向用户播报进度**，直到任务完成或超时：
 
 > [!IMPORTANT]
 > **监控 = 读文件，不需要终端。** `live.log` 和 `execution_record.json` 是普通文件，
 > 用 `view_file` 读取即可。**只有 Ctrl+C 干预才需要终端。**
 > 这个区分至关重要 — 当 tmux 出问题时（如 user cancel 后），AG 仍然可以用 `view_file` 正常监控。
 
-```
-首次检查: launch 后 30s
-后续间隔: 60s
-每次检查（优先用 view_file，不用终端）:
-  1. view_file("~/.task-delegate/{task_id}/live.log", StartLine=最后50行)
-  2. view_file("~/.task-delegate/{task_id}/execution_record.json")
-     → 文件存在 = 任务已结束
+> [!CAUTION]
+> **播报 ≠ 可选。** 每次 poll 之后 AG 必须在对话中输出进度摘要。
+> 用户需要 **看到** AG 在持续跟踪，不是在后台沉默 polling。
+> 沉默 = 用户以为 AG 掉线了 = 失败。
+> **不要用 `notify_user` 播报中间进度** — 那会 yield 控制权、打断监控循环。
+> 用普通对话消息 + `task_boundary` TaskStatus 更新即可。
 
-仅在需要干预时才用终端:
-  tmux send-keys -t task-{task_id} C-c   ← 这才需要终端
+**每轮 Poll 的具体步骤（在同一 turn 内循环）：**
+
+```
+1. view_file("~/.task-delegate/{task_id}/live.log", StartLine=最后100行)
+   → 阅读最新输出，理解 subagent 当前在做什么
+
+2. view_file("~/.task-delegate/{task_id}/execution_record.json")
+   → 文件存在 = 任务已结束 → 跳到 Step 4
+   → 文件不存在 = 任务仍在运行 → 继续
+
+3. 评估健康状态（见下方检查表）
+
+4. 在对话中输出进度摘要（格式见下方模板）
+   → 这是普通 assistant 文本，不是 notify_user
+   → 用户在对话框里直接看到
+
+5. 更新 task_boundary（TaskStatus = 当前进度关键词）
+   → 然后等待间隔后再次 view_file live.log → 重复
 ```
 
-**每次检查时 AG 必须评估：**
+> [!IMPORTANT]
+> **整个 Monitor 阶段不 yield 控制权。** AG 在同一个 turn 内完成所有 poll 轮次。
+> `notify_user` 只在最终结果汇报时使用（Step 4c），不用于中间进度。
+
+**播报间隔：**
+
+| 阶段 | 间隔 | 说明 |
+|------|------|------|
+| 首次检查 | launch 后 30s | 确认 subagent 已启动 |
+| 正常运行中 | 60-90s | 每轮读 log + 播报 |
+| 检测到异常 | 立刻 | 先播报再干预 |
+
+**播报模板：**
+
+```
+🔄 进度播报 [{task_id}] — 第 N 轮
+
+**当前状态**: {running / stalled / error / completing}
+**Subagent 正在**: {从 live.log 提取的一句话概括，例如 "正在编辑 src/auth.py 添加 JWT 验证"}
+**已运行时间**: {M 分 S 秒}
+**健康检查**: ✅ 方向正确 / ⚠️ 有偏离 / ❌ 需要干预
+
+{如果有值得注意的细节，加 1-2 句}
+```
+
+> [!TIP]
+> 播报要**简洁有信息量**。用户看播报是为了判断是否需要干预。
+> 不要复制粘贴 live.log 原文 — 要**摘要和判断**。
+> 每轮播报控制在 3-5 行以内。
+
+**每次检查时 AG 必须评估（并在播报中体现）：**
 
 | 检查项 | 正常 | 异常 → 行动 |
 |--------|------|-------------|
-| 方向正确？ | 路径/工具与 prompt 一致 | Ctrl+C → 改 prompt → 重新 launch |
-| 在推进？ | 有新输出 | 5 min 无输出 → Ctrl+C → 诊断 |
-| 无错误？ | 正常运行 | 重复报错 → Ctrl+C → 修底层问题 |
-| 未超时？ | 在预估时间内 | 超时 → Ctrl+C → 缩小范围或换后端 |
+| 方向正确？ | 路径/工具与 prompt 一致 | 播报 ⚠️ → Ctrl+C → 改 prompt → 重新 launch |
+| 在推进？ | 有新输出 | 5 min 无输出 → 播报 ❌ → Ctrl+C → 诊断 |
+| 无错误？ | 正常运行 | 重复报错 → 播报 ❌ → Ctrl+C → 修底层问题 |
+| 未超时？ | 在预估时间内 | 超时 → 播报 ❌ → Ctrl+C → 缩小范围或换后端 |
 
 #### 3c. Intervention
 
@@ -359,15 +415,33 @@ AG should still include critical context in `prompt.txt` because:
 ❌ AG writes the code itself instead of delegating
    → If user asked for delegation, use a backend
 
+❌ AG 在 prompt 中写详细实现方案（函数签名、代码结构、修改步骤）
+   → Prompt 只传递目标+上下文+约束，executor 自己设计方案
+   → AG 是 orchestrator，不是 architect
+
+❌ AG 在 prompt 中重复 executor 能自己读到的信息（tech stack、代码风格）
+   → Executor 会自己读代码和 CLAUDE.md/GEMINI.md
+   → 只提供 executor 无法自行获取的背景知识
+
 ❌ Dispatch and forget — launch 后不再跟进
-   → AG 必须执行完整的 Launch → Monitor → Extract → Verify → Follow-up 链路
+   → AG 必须执行完整的 Launch → Monitor+播报 → Extract → Verify → Follow-up 链路
+
+❌ 沉默 polling — 只读 live.log 但不在对话中说明
+   → 每轮 poll 后必须在对话中输出进度摘要
+   → 沉默 = 用户以为 AG 掉线了 = 失败
+
+❌ 用 notify_user 播报中间进度
+   → notify_user 会 yield 控制权，打断监控循环
+   → 用普通对话消息 + task_boundary 更新即可
+   → notify_user 只在最终结果汇报时使用
 
 ❌ 用终端（tmux/run_command）读 live.log 或 execution_record.json
    → 这些是文件读取操作，用 view_file。终端只用于 Ctrl+C 干预
    → 特别是 user cancel 后 tmux 可能卡住，但 view_file 不受影响
 
-❌ Vague prompt: "fix the bugs"
-   → MUST specify which files, what behavior is wrong, expected behavior
+❌ Vague prompt: "fix the bugs"（模糊到连目标都不清楚）
+   → 必须说清楚要达成什么效果，以及相关文件在哪
+   → 但不需要指定具体怎么修
 
 ❌ Launching backend in AG's own tmux session
    → ALWAYS use dedicated task-{task_id} session
@@ -380,6 +454,9 @@ AG should still include critical context in `prompt.txt` because:
 
 ❌ Reporting "task done" without verification
    → Step 4b-4c: AG must independently verify before reporting
+
+❌ 播报时复制粘贴 live.log 原文
+   → 播报要摘要和判断，不是 raw log dump
 ```
 
 ## Troubleshooting
