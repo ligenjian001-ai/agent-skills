@@ -43,21 +43,21 @@ mkdir -p "${DESIGN_DIR}/sketch/"{architect,realist,explorer}
 # AG 为每个 agent 写 prompt.txt，注入 input.md 内容
 
 # 通过 task-delegate 并行启动
-bash /home/lgj/agent-skills/task-delegate/scripts/task_launch.sh \
+bash ~/agent-skills/task-delegate/scripts/task_launch.sh \
   ${DESIGN_ID}_architect ${PROJECT_DIR} --backend cc \
   --task-dir ${DESIGN_DIR}/sketch/architect
 
-bash /home/lgj/agent-skills/task-delegate/scripts/task_launch.sh \
+bash ~/agent-skills/task-delegate/scripts/task_launch.sh \
   ${DESIGN_ID}_realist ${PROJECT_DIR} --backend codex \
   --task-dir ${DESIGN_DIR}/sketch/realist
 
-bash /home/lgj/agent-skills/task-delegate/scripts/task_launch.sh \
+bash ~/agent-skills/task-delegate/scripts/task_launch.sh \
   ${DESIGN_ID}_explorer ${PROJECT_DIR} --backend gemini \
   --task-dir ${DESIGN_DIR}/sketch/explorer
 
 # 提取输出
 for role in architect realist explorer; do
-  bash /home/lgj/agent-skills/task-delegate/scripts/task_extract.sh \
+  bash ~/agent-skills/task-delegate/scripts/task_extract.sh \
     ${DESIGN_ID}_${role} \
     --task-dir ${DESIGN_DIR}/sketch/${role} \
     --output-file ${DESIGN_DIR}/sketch/${role}/output.md
@@ -88,7 +88,7 @@ AG 主导设计融合：
 write_to_file("${DESIGN_DIR}/spike/spike_001/spec.md", ...)
 
 # 用 task-delegate 委派实现
-bash /home/lgj/agent-skills/task-delegate/scripts/task_launch.sh \
+bash ~/agent-skills/task-delegate/scripts/task_launch.sh \
   ${DESIGN_ID}_spike001 ${PROJECT_DIR} --backend cc \
   --task-dir ${DESIGN_DIR}/spike/spike_001
 ```
@@ -107,6 +107,34 @@ AG 将验证过的设计转化为可执行的实施计划：
 1. **分阶段路线图** — `roadmap.md`（Phase A/B/C + 预估时间 + 关键产出）
 2. **Infra Request 草案** — 每个关键任务写成 `infra-request` 模板格式的 `request_NNN.md`
 3. **验收标准** — 每个任务的 success criteria
+4. **验证方式** — 每个任务 merge 后如何验证（不可缺省）
+
+#### Infra Request 提交规范
+
+BLUEPRINT 产出最终以 GitHub Issue 形式提交。注意以下要点：
+
+```bash
+# 1. 先检查 label 是否存在，不存在则创建
+gh label list --repo $ISSUES_REPO --json name | grep -q '"ready"' || \
+  gh label create ready --repo $ISSUES_REPO --color 0E8A16
+
+# 2. 创建 issue
+gh issue create --repo $ISSUES_REPO \
+  --title "[Infra] $TITLE" \
+  --label "infra" \
+  --body "$SUMMARY_BODY"
+
+# 3. 将详细设计文档作为 comment 附加（避免 issue body 过长）
+# 注意：如果设计文档在权限受限目录，先 cp 到可读路径
+cp $DESIGN_DIR/blueprint/roadmap.md /tmp/design_doc.md
+gh issue comment $ISSUE_NUM --repo $ISSUES_REPO \
+  --body-file /tmp/design_doc.md
+rm /tmp/design_doc.md
+```
+
+> [!WARNING]
+> **`gh issue create --label` 如果 label 不存在会静默失败（issue 创建但不带 label），不会报错退出码非零。**
+> 务必先用 `gh label list` 检查或 `gh label create` 确保 label 存在。
 
 **✅ USER CHECKPOINT**：展示蓝图 + infra-request 草案
 
@@ -196,4 +224,21 @@ system-design 接受任意格式的分析输入，但推荐结构：
 | `task-delegate` | 所有 subagent 的执行底座 |
 | `deep-analysis` | 前置分析（可选，提供 input.md） |
 | `agent-panel-discussion` | DECIDE 中验证关键决策的可选工具 |
-| `infra-request` | BLUEPRINT 的输出通道 |
+
+## Lessons Learned
+
+以下是实际使用中积累的经验教训：
+
+### GitHub Issue 创建
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| `--label` 静默失败 | Label 不存在于目标 repo | 先 `gh label create` |
+| 设计文档无法 `--body-file` | AG brain 目录权限限制 | 先 `cp` 到 `~` 或 `/tmp` |
+| Issue body 过长 | 完整设计 > 20KB | Body 写摘要，设计文档作为 comment 附加 |
+
+### 验证闭环
+
+- **Infra request 必须包含验证方式字段** — 如果缺省，merge 后无法自动验证
+- **验证命令不硬编码** — 不同任务的验证方式不同，应在 issue 中明确指定
+- **区分编码/验证角色** — 编码用 CC Max，验证用 Codex（或其他），角色分离提高可靠性
