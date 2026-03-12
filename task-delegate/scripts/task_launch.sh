@@ -88,6 +88,15 @@ if [[ ! -d "$PROJECT_DIR" ]]; then
   exit 1
 fi
 
+# --- Prompt size guardrail ---
+PROMPT_SIZE=$(wc -c < "$PROMPT_FILE" 2>/dev/null || echo 0)
+if [[ "$PROMPT_SIZE" -gt 6000 ]]; then
+  echo "🔴 PROMPT TOO LARGE: ${PROMPT_SIZE} bytes (>6KB) — AG is likely dictating HOW instead of WHAT." >&2
+  echo "   Good prompts are 1.5-3KB. Review prompt.txt and remove code snippets/function signatures." >&2
+elif [[ "$PROMPT_SIZE" -gt 4000 ]]; then
+  echo "⚠️  PROMPT LARGE: ${PROMPT_SIZE} bytes (>4KB) — check for over-specification." >&2
+fi
+
 # --- Backend validation with fallback ---
 check_backend() {
   local be="$1"
