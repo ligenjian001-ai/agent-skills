@@ -55,6 +55,12 @@ Aspect Discovery → [user ✓] → Dual-Agent Analysis → Synthesis → [user 
 
 ### Step 2: Dual-Agent Analysis（Subagent 执行）
 
+> [!CAUTION]
+> **HARD GATE — NON-NEGOTIABLE**
+> This step MUST be executed via `task-delegate` (CC subagent). AG MUST NOT perform the analysis itself.
+> AG's role here is **orchestrator only**: prepare context, launch agents, extract results.
+> If `task-delegate` is unavailable or fails, STOP and inform the user. Do NOT fall back to self-analysis.
+
 用 Analyst + Challenger 双 agent 对抗模式进行深度分析。
 
 #### 准备 Context Bundle
@@ -122,6 +128,14 @@ bash /home/lgj/agent-skills/task-delegate/scripts/task_extract.sh \
 
 ### Step 3: Synthesis（AG 综合）
 
+> [!CAUTION]
+> **PRE-FLIGHT GATE**: Before starting synthesis, AG MUST verify:
+> ```bash
+> ls -l ${ANALYSIS_DIR}/analyst/output.md ${ANALYSIS_DIR}/challenger/output.md
+> ```
+> Both files MUST exist and be non-empty. If either is missing, STOP — Step 2 was skipped.
+> AG writing analysis reports without Analyst/Challenger outputs is a **protocol violation**.
+
 AG 读取 Analyst + Challenger 两份输出，综合写 `system_map.md`：
 
 - 每个 aspect 的关键发现（融合 Analyst 分析 + Challenger 质疑）
@@ -175,6 +189,12 @@ AG 读取 Analyst + Challenger 两份输出，综合写 `system_map.md`：
 
 ❌ 把 prompt/context 写到 /tmp
    → 用 ~/.deep-analysis/ 目录保存有价值的中间产物
+
+❌ AG 自己做 Analyst/Challenger 的工作（"能力溢出"捷径）
+   → 检测信号：~/.task-delegate/ 无记录、analyst/challenger 目录为空、
+     报告作者是 AG 而非 CC subagent
+   → 即使 AG 能产出质量不错的报告，也必须走 Dual-Agent 流程
+   → 对抗性审查的价值在于引入独立视角，AG 自己做等于自己审自己
 ```
 
 ## Composability
