@@ -88,6 +88,11 @@ if [[ ! -d "$PROJECT_DIR" ]]; then
   exit 1
 fi
 
+# --- Task ID format validation ---
+if [[ ! "$TASK_ID" =~ ^[0-9]{8}_[0-9]{4}_ ]]; then
+  echo "⚠️  TASK_ID '${TASK_ID}' does not follow YYYYMMDD_HHMM_desc convention." >&2
+fi
+
 # --- Prompt size guardrail ---
 PROMPT_SIZE=$(wc -c < "$PROMPT_FILE" 2>/dev/null || echo 0)
 if [[ "$PROMPT_SIZE" -gt 6000 ]]; then
@@ -181,8 +186,16 @@ case "$BACKEND" in
       EXIT_CODE=$?
       STATUS="failed"
     fi
-    # Extract session_id from stream-json output
-    BACKEND_SESSION_ID=$(grep -o '"session_id":"[^"]*"' "$LIVE_LOG" | head -1 | cut -d'"' -f4 || true)
+    # Extract session_id from stream-json output (use Python for robust parsing)
+    BACKEND_SESSION_ID=$(python3 -c "
+import re
+with open('$LIVE_LOG') as f:
+    for line in f:
+        m = re.search(r'\"session_id\"\s*:\s*\"([^\"]+)\"', line)
+        if m:
+            print(m.group(1))
+            break
+" 2>/dev/null || true)
     ;;
   codex)
     # Use STDIN pipe (codex exec -) to avoid ARG_MAX limit on large prompts
@@ -338,6 +351,27 @@ fi
 RUNNER_SCRIPT
 
 chmod +x "$RUNNER"
+
+# --- Write initial execution record (status=running) ---
+# Ensures record exists even if tmux session is killed mid-execution
+python3 -c "
+import json
+from datetime import datetime, timezone
+rec = {
+    'task_id': '$(basename "$TASK_DIR")',
+    'backend': '$BACKEND',
+    'status': 'running',
+    'started_at': datetime.now().astimezone().isoformat(),
+    'prompt_file': '$PROMPT_FILE',
+    'prompt_bytes': int('$PROMPT_SIZE' or '0'),
+    'api_billing': '$API_BILLING' == 'true',
+    'live_log': '$LIVE_LOG'
+}
+if '$ROLE': rec['role'] = '$ROLE'
+if '$SOURCE_CONV': rec['source_conversation'] = '$SOURCE_CONV'
+with open('$EXEC_RECORD', 'w') as f:
+    json.dump(rec, f, indent=2)
+" 2>/dev/null || true
 
 # --- Kill existing session if any ---
 tmux kill-session -t "$SESSION" 2>/dev/null || true

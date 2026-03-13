@@ -43,8 +43,9 @@ fi
 
 TOPIC=$(cat "${TASK_DIR}/topic.txt")
 
-# Get previous round summary CONTENT for rebuttals (inlined into prompts)
+# Get previous round summary CONTENT for rebuttals (only used in fallback mode)
 PREV_SUMMARY_CONTENT=""
+SESSION_RESUME_AVAILABLE=false
 if [[ "$ROUND_NUM" -gt 0 ]]; then
   PREV_ROUND=$((ROUND_NUM - 1))
   PREV_FILE="${TASK_DIR}/round_${PREV_ROUND}_summary.md"
@@ -52,6 +53,30 @@ if [[ "$ROUND_NUM" -gt 0 ]]; then
     PREV_SUMMARY_CONTENT=$(cat "$PREV_FILE")
   else
     echo "WARN: Previous round summary not found: ${PREV_FILE}" >&2
+  fi
+
+  # Check if session resume is available (any agent from previous round has session_id)
+  TASK_DELEGATE_DIR="${HOME}/.task-delegate"
+  PANEL_ID=$(basename "$TASK_DIR")
+  PANEL_TS=$(echo "$PANEL_ID" | grep -oP '\d{8}_\d{4}')
+  if [[ -n "$PANEL_TS" ]]; then
+    for check_agent in skeptic pragmatist optimist; do
+      PREV_TASK_ID="${PANEL_TS}_panel_r${PREV_ROUND}_${check_agent}"
+      PREV_RECORD="${TASK_DELEGATE_DIR}/${PREV_TASK_ID}/execution_record.json"
+      if [[ -f "$PREV_RECORD" ]]; then
+        PREV_SID=$(python3 -c "import json; print(json.load(open('${PREV_RECORD}')).get('session_id',''))" 2>/dev/null || true)
+        if [[ -n "$PREV_SID" ]]; then
+          SESSION_RESUME_AVAILABLE=true
+          break
+        fi
+      fi
+    done
+  fi
+
+  if [[ "$SESSION_RESUME_AVAILABLE" == "true" ]]; then
+    echo "[panel-prepare] Session resume available from R${PREV_ROUND} — lightweight prompts"
+  else
+    echo "[panel-prepare] No session resume — will inline truncated summary (fallback mode)"
   fi
 fi
 
@@ -81,18 +106,48 @@ for agent in skeptic pragmatist optimist; do
     echo "$TOPIC"
     echo ""
 
-    # For rebuttals, inline previous round summary content
-    if [[ "$ROUND_NUM" -gt 0 && -n "$PREV_SUMMARY_CONTENT" ]]; then
-      echo "# 上一轮讨论内容"
-      echo ""
-      echo "$PREV_SUMMARY_CONTENT"
-      echo ""
+    # For rebuttals, behavior depends on session resume availability
+    if [[ "$ROUND_NUM" -gt 0 ]]; then
+      if [[ "$SESSION_RESUME_AVAILABLE" == "true" ]]; then
+        # === SESSION RESUME MODE: lightweight prompt ===
+        # Backend already has context from previous round via session memory
+        echo "# 上一轮已在对话历史中"
+        echo ""
+        echo "你已经在上一轮给出了分析。其他panelist的观点也已由AG汇总。"
+        echo "下面是其他panelist的**核心结论摘要**（完整分析在你的对话历史中）："
+        echo ""
+        # Inline only a brief summary of other agents' conclusions (not full output)
+        if [[ -n "$PREV_SUMMARY_CONTENT" ]]; then
+          echo "$PREV_SUMMARY_CONTENT" | head -c 2000
+          PREV_SIZE=${#PREV_SUMMARY_CONTENT}
+          if [[ "$PREV_SIZE" -gt 2000 ]]; then
+            echo ""
+            echo "...[摘要已截断，完整内容在上一轮 session 中]"
+          fi
+        fi
+        echo ""
+      else
+        # === FALLBACK MODE: inline truncated summary ===
+        echo "# 上一轮讨论内容"
+        echo ""
+        if [[ -n "$PREV_SUMMARY_CONTENT" ]]; then
+          # Truncate to ~10KB total (each of 3 agents gets ~3000 chars in summary)
+          echo "$PREV_SUMMARY_CONTENT" | head -c 10000
+          PREV_SIZE=${#PREV_SUMMARY_CONTENT}
+          if [[ "$PREV_SIZE" -gt 10000 ]]; then
+            echo ""
+            echo "...[内容已截断，原始大小: ${PREV_SIZE} 字节]"
+          fi
+        fi
+        echo ""
+      fi
+
       echo "# 你的任务"
       echo ""
       echo "这是**第 ${ROUND_NUM} 轮（反驳轮）**。"
       echo ""
 
-      # === 改进 #1: 观点漂移追踪 ===
+      # === 观点漂移追踪 ===
       echo "## ⚡ 立场变化声明（必填）"
       echo ""
       echo "在回复的**最开头**，你必须先声明立场变化。格式如下："
@@ -111,7 +166,7 @@ for agent in skeptic pragmatist optimist; do
       echo "3. 标注小组正在趋于共识的点 vs 仍有分歧的点"
       echo ""
 
-      # === 改进 #2: 最终轮特殊指令 ===
+      # === 最终轮特殊指令 ===
       if [[ "$IS_FINAL_ROUND" == "true" ]]; then
         echo "## 🏁 最终轮特殊要求"
         echo ""

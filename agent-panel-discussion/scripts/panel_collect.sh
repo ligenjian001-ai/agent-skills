@@ -128,7 +128,16 @@ fi
     echo ""
 
     if [[ -f "$output" ]]; then
-      cat "$output"
+      # Truncation guard: limit each agent output to 4000 chars in summary
+      OUTPUT_SIZE=$(wc -c < "$output" 2>/dev/null || echo 0)
+      if [[ "$OUTPUT_SIZE" -gt 4000 ]]; then
+        head -c 4000 "$output"
+        echo ""
+        echo ""
+        echo "> *[输出已截断: 原始 ${OUTPUT_SIZE} 字节 → 4000 字节。完整内容见 ${task_dir}/output.md]*"
+      else
+        cat "$output"
+      fi
     else
       echo "*[无输出 — agent 失败或未产生响应]*"
     fi
