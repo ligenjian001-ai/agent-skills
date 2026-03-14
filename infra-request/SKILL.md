@@ -1,6 +1,6 @@
 ---
 name: infra-request
-description: MANDATORY when filing infra requests. Covers GitHub Issues submission (playground issues post), idempotency guard, post-submit 3-step verification, project-aware labeling, Tool Integration Plan, and Self-Verification Guide.
+description: MANDATORY when filing infra requests. Covers Python API-first deliverable priority, GitHub Issues submission, idempotency guard, post-submit verification, project-aware labeling, and Self-Verification Guide.
 ---
 
 # Infra Request Skill
@@ -103,24 +103,70 @@ The infra request lifecycle:
 
 **FORBIDDEN**: Requests that only produce documentation without executable tools.
 
+## ⚠️ Python API vs Playground CLI (HARD GATE)
+
+> [!CAUTION]
+> **Python API 是基础，playground CLI 是可选包装。**
+> AG 提需求时禁止「功能 → playground 子命令」的条件反射。
+> 正确思路：「功能 → Python API 函数 → (可选) CLI wrapper」。
+
+### ✅ 适合 `playground` CLI 命令的场景
+
+| 信号 | 说明 | 例子 |
+|------|------|------|
+| **人类终端操作** | 用户在 terminal 手动执行 | `playground build`, `playground deploy` |
+| **环境诊断** | 检查/报告系统状态 | `playground doctor`, `playground version` |
+| **一次性 ad-hoc** | 非编程场景的临时操作 | `playground issues list`, `playground eod-report` |
+| **Demo/演示** | 面向非开发者展示 | `playground init`, `playground create` |
+
+### ❌ 应优先 Python API 的场景
+
+| 信号 | 说明 | 例子 |
+|------|------|------|
+| **Agent 会在代码中调用** | CC/AG 在 Python 脚本中使用 | 数据加载、特征提取、映射查询 |
+| **需要程序化组合** | 多个操作组成 pipeline | K 线生成 + 质量校验 + 报告 |
+| **返回结构化数据** | 需要 DataFrame / dict / object 返回值 | 代码映射、市场数据查询 |
+| **需要参数化反复调用** | 不同参数批量使用 | 批量回测、特征提取 |
+| **不涉及 SDK 工具链** | 运维/部署/VPN 管理 | 应归入 workstation-ops 脚本 |
+
+### 正确的 Deliverable 写法
+
+```markdown
+### Deliverable 1: Python API (P0)
+`sdk_tools/core/instrument.py` 新增：
+\```python
+def get_bond_stock_mapping(bond_code: str) -> dict: ...
+def load_bond_stock_mappings() -> pd.DataFrame: ...
+\```
+
+### Deliverable 2: CLI wrapper (P1, 可选)
+\```bash
+playground code-info 123163  # 仅当用户确认需要 terminal ad-hoc 操作时
+\```
+```
+
+**违反此标准 = 糟糕的需求提出方式。** AG 在提交前必须自检：每个 Deliverable 是否能用 Python API 替代？如果可以，API 必须是 P0，CLI 降为 P1 可选。
+
 ## How to Compose a Request
 
 When filing an infra request:
 
-1. **Identify the tool needed**
-   - What executable will solve this problem?
-   - What should the command-line interface be?
+1. **Identify the capability needed**
+   - What **function** will solve this problem? (优先思考 Python API)
    - What inputs and outputs?
+   - 谁是消费者？ Agent 代码调用 → Python API | 人类终端操作 → CLI/脚本
 
-2. **Specify deliverables**
-   - Request SPECIFIC tools (scripts, binaries, skills)
+2. **Specify deliverables (API-first)**
+   - **P0**: Python API 函数（`sdk_tools/core/*.py` 或 `sdk_tools/api.py`）
+   - **P1 可选**: CLI wrapper（仅当有明确的 terminal 使用场景）
+   - **P1 可选**: Shell 脚本（运维操作、Jenkins pipeline）
    - NOT just "fix X" or "improve Y"
-   - Example: "Build `scripts/sync_eod_data.sh`" NOT "provide data access"
+   - Example: "Add `sdk_tools.core.instrument.get_bond_mapping()`" NOT "add `playground code-info`"
 
 3. **Define integration**
-   - Where will this tool live? (`scripts/`, `.agent/skills/`, `bin/`)
-   - How will I invoke it in future sessions?
-   - What other tools depend on this?
+   - Python API: 放在 `sdk_tools/core/` 的哪个模块？是否需要导出到 `sdk_tools/api.py`？
+   - CLI: 放在 `sdk_tools/cli/commands/` 的哪个文件？
+   - Shell 脚本: 放在 `scripts/` 的哪个目录？
 
 4. **Submit via GitHub Issues** (see `github_issues_guide.md` in this skill directory)
 
@@ -176,16 +222,17 @@ To claim **"✅ Verified"**, you MUST:
 
 ## What I Need
 
-{One-sentence description of the tool/capability needed}
+{One-sentence description of the capability needed}
 
-### Deliverable 1: {Tool Name} (P0/P1/P2)
+### Deliverable 1: Python API (P0)
 
-**What**: `{path/to/tool.sh}` - {Brief description}
+**What**: `sdk_tools/core/{module}.py` — {Brief description}
 
 **Usage**:
-```bash
-{exact command-line invocation}
-# {expected output format}
+```python
+from sdk_tools.core.{module} import {function}
+result = {function}({args})
+# returns: {expected return type and format}
 ```
 
 **What it should do**:
@@ -194,9 +241,18 @@ To claim **"✅ Verified"**, you MUST:
 2. {Input processing}
 3. {Output generation}
 
-### Deliverable 2: {Next Tool} (P0/P1/P2)
+### Deliverable 2: CLI wrapper (P1, 可选 — 仅当有 terminal 使用场景)
 
-{Repeat for each tool needed}
+**What**: `playground {subcommand}` — {Brief description}
+
+```bash
+playground {subcommand} {args}
+# {expected output}
+```
+
+### Deliverable N: {其他工具} (P0/P1/P2)
+
+{C++ 修复 / Shell 脚本 / Jenkins pipeline 等, 按需}
 
 ## Environment Context (workstation-ops / 环境配置类)
 
