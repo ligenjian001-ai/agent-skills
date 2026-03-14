@@ -1,0 +1,34 @@
+### A6: Agent Trial [OPTIONAL]
+
+Run a minimal end-to-end use case through the framework to discover friction
+that static code reading cannot reveal.
+
+**Protocol:**
+
+1. Pick the simplest documented workflow (e.g., "load data → run backtest → get results")
+2. Follow ONLY the project's own docs (CLAUDE.md / README / --help) — do NOT read source code for hints
+3. Record every friction point using the F-N format below
+4. Stop after completing the workflow OR after accumulating 10+ friction points
+
+**Friction Log Format (per point):**
+
+```
+F-{N}: {one-line title}
+Scene:    What you were trying to do
+Expected: What the docs/API led you to expect
+Actual:   What actually happened
+Resolution: How you worked around it
+Suggestion: What the framework should change
+```
+
+**Maturity Levels:**
+
+- L0: Cannot complete the basic workflow without reading source code
+- L1: Workflow completes but with 5+ friction points
+- L2: Workflow completes with 1-2 minor friction points
+- L3: Workflow completes smoothly; docs alone are sufficient
+
+**Evidence**: friction log entries (F-1 through F-N), screenshots of errors if applicable
+
+**Output**: Include the full friction log in the assessment output, separate from the
+per-dimension summary.

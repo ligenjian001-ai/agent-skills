@@ -1,0 +1,68 @@
+# Task: Assess Agent-Native Product Maturity
+
+## Objective
+Examine this project and assess its agent-facing interface maturity.
+DO NOT modify any files. Read-only assessment.
+
+## Project
+- Path: {{PROJECT_PATH}}
+- Language: {{LANGUAGE}}
+
+## Dimensions to Assess
+
+### A1: API Quality ⭐ (assess FIRST — prerequisite for A2 and A5)
+- L0: No clear module boundaries; functions do multiple unrelated things; no convenience wrappers
+- L1: Basic modules exist but concepts overlap; some helpers but incomplete
+- L2: Orthogonal APIs; clear conceptual model; each function has single responsibility; Top-5 workflows covered
+- L3: L2 + composable (APIs chain naturally); result objects have typed sub-views; Top-5 workflows are 1-liners
+Evidence: module boundaries, concept conflation, implicit dependencies, parameter richness, error design, convenience coverage
+Assessment checklist:
+1. Conceptual model: Are domain concepts distinct types or conflated?
+2. Orthogonality: Can you change one concern without touching another?
+3. Parameter richness: Do functions expose enough knobs, or are behaviors hardcoded?
+4. Implicit dependencies: Do modules secretly depend on fields injected elsewhere?
+5. Error design: Do functions fail clearly, or silently produce garbage?
+6. Convenience coverage: What % of Top-5 workflows require <3 lines? >10 lines? >50 lines?
+
+### A2: API Surface
+- L0: No CLI or API entry point
+- L1: CLI exists, some --help
+- L2: Consistent --help on all commands, standard exit codes
+- L3: --json output on all commands, structured error objects, machine-parseable
+Evidence: entry points, CLI frameworks, --help coverage, output formats
+
+### A3: Environment Abstraction
+- L0: Hardcoded paths, no setup
+- L1: setup.sh or requirements.txt exists
+- L2: Env vars for config, portable across machines
+- L3: Auto-detect environment, declarative config, capability query
+Evidence: setup scripts, hardcoded paths (grep /home/ /opt/ /data/), env vars
+
+### A4: Observability
+- L0: print() only
+- L1: Logging framework present
+- L2: Structured logging + health check command
+- L3: Discovery APIs (list_*), error catalog, agent-queryable metrics
+Evidence: logging config, health commands, list/discover functions
+
+### A5: Documentation
+- L0: No agent-facing docs
+- L1: README exists
+- L2: CLAUDE.md with module guide + anti-patterns
+- L3: AGENTS.md + per-module docs + executable doc-tests + negative knowledge
+Evidence: CLAUDE.md, AGENTS.md, docstrings, anti-pattern documentation
+
+{{AGENT_TRIAL_SECTION}}
+
+## Output Format
+Write to {{OUTPUT_PATH}}:
+
+### {ID}: {Name}
+**Level**: L{0-3}
+**Evidence**: {specific files/patterns}
+**Quick Win**: {easiest improvement}
+**Key Gap**: {what's missing for next level}
+
+## Summary Matrix
+| Dimension | Current | Quick Win Available |
+|-----------|---------|-------------------|

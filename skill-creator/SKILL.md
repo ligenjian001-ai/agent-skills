@@ -141,6 +141,10 @@ Problem → Fix table for known failure modes.
 
 While `SKILL.md` tells the agent **what to do**, `README.md` tells humans **why it was built this way**.
 
+> [!IMPORTANT]
+> **README.md 必须用中文撰写。** 技能用户群体以中文为主，README 是给人看的设计文档，中文更高效。
+> SKILL.md 保持中英混合（agent 消费），README.md 全中文（人类消费）。
+
 ### Structure
 
 ```markdown
@@ -298,12 +302,63 @@ This ensures that when a skill's raison d'être disappears, we know exactly what
    - Does this skill have rules whose violation causes irrecoverable failure? → Register
    - Does this skill need a conversation-start ritual? → Register
    - Is this skill purely on-demand? → Skip registration
+5. **Review project README** — 检查 `/home/lgj/agent-skills/README.md`：
+   - 技能清单表是否需要新增/更新条目
+   - 技能协作架构图（mermaid）是否需要添加新节点或连线
+   - 数据流表是否需要新增 IPC 目录
+   - 技能间协作关系表是否需要新增条目
 
 ### Phase 6: Iterate
 
 - After 2-3 real uses, update anti-patterns with new failure modes
 - After 5+ uses, write README.md FAQ from real questions
 - Version bump in evolution history for significant changes
+
+### 编排类 Skill 的特殊考量
+
+> [!IMPORTANT]
+> 技能会越来越复杂，多数依赖大量 subagent 编排（如 deep-analysis, system-design, agent-native-product）。
+> 编排类 skill 需要额外的设计约束和迭代机制。
+
+**编排类 skill 的特征**：
+- 多步骤 subagent 调用，每步有独立 prompt
+- prompt 迭代频率远高于流程逻辑 → **必须将 prompt 放到 `prompts/` 目录**
+- 需要通过日志进行持续反思调整
+
+**日志驱动的持续反思**：
+
+编排类 skill 的质量取决于 prompt 质量，而 prompt 质量只有通过实际执行才能验证。
+每次 skill 被使用后，AG 应：
+
+1. **回顾 subagent 输出**（`~/.task-delegate/{task_id}/` 中的执行记录）
+2. **识别 prompt 不足**：subagent 遗漏了什么？产出了什么低质量内容？
+3. **更新 prompt 文件**：直接改 `prompts/*.txt`，不需要动 SKILL.md
+4. **记录改进原因**：在 README.md 的演进历史中记录为什么改
+
+这形成一个**闭环**：使用 → 回顾日志 → 改 prompt → 再使用 → 再回顾。
+SKILL.md 保持稳定（流程不变），prompt 文件持续进化。
+
+### 跨 Skill 共享 Prompt 检测
+
+创建或调整 skill 后，AG 应检查 `prompts/` 中的 sub-prompt 是否与其他 skill 的 prompt 高度重合。
+
+**检测时机**：
+- 创建新 skill 的 prompt 文件时
+- 修改现有 prompt 文件时
+- 用户手动 cue "检查 prompt 重复"
+
+**检测方法**：
+1. 扫描 `/home/lgj/agent-skills/*/prompts/` 下所有 prompt 文件
+2. 比较功能意图（不是字面匹配）：是否有两个 prompt 在做本质相同的事？
+3. 常见共享模式：
+   - 评估类 prompt（多个 skill 都有 assess/audit 步骤）
+   - 报告生成模板（maturity report, friction log）
+   - 通用 subagent 角色定义（investigator, auditor）
+
+**发现重合时**：
+- AG **主动询问用户**："发现 `{skill_a}/prompts/{x}.txt` 和 `{skill_b}/prompts/{y}.txt` 功能高度重合，是否要抽取到公共 skill？"
+- 如果用户同意：创建公共 prompt 文件（放 `common-prompts/` 或合适的共享位置），两个 skill 引用同一份
+- 如果用户拒绝：在各自 README 中注明"与 {other_skill} 有类似 prompt，但因 {reason} 保持独立"
 
 ---
 

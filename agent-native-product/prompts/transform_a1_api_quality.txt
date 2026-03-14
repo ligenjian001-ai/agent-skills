@@ -1,0 +1,89 @@
+# Task: Assess and Improve API Quality (Foundation + Convenience Layers)
+
+## Objective
+Evaluate and recommend improvements to this project's API quality — the foundation
+that all other agent-native dimensions depend on.
+
+## Project
+- Path: {{PROJECT_PATH}}
+- Language: {{LANGUAGE}}
+- Entry point: {{ENTRY_POINT}}
+
+## Assessment Findings
+{{A1_ASSESSMENT}}
+
+## What Makes an API Agent-Friendly at the Foundation Level
+
+APIs should fall into two clear layers:
+
+- **Foundation layer**: Orthogonal, parameter-rich, high-cohesion/low-coupling, complete conceptual model
+- **Convenience layer**: Covers Top-5 user workflows in minimal code (1-3 lines)
+
+## Actions
+
+### 1. Conceptual Model Audit
+
+Map out the project's domain concepts and check for conflation:
+
+- Are related-but-distinct concepts (e.g., order/fill/round-trip, raw data/bar/feature) separate types or conflated?
+- Are there implicit dependencies where one module secretly relies on fields injected elsewhere?
+- Is there a clear type hierarchy that agents can explore?
+
+For each concept, document:
+- Name: what the domain concept is
+- Type: how it's represented (class, dict, DataFrame, None)
+- Issues: conflation, implicit deps, missing abstraction
+
+### 2. Orthogonality Check
+
+For each major module/component:
+- Can you change one concern without touching another?
+- Do functions have single responsibility?
+- Are there cross-cutting concerns tangled into module interfaces?
+
+### 3. Parameter Richness vs Hardcoding
+
+Scan key functions for hardcoded behaviors that should be parameters:
+- Default values that prevent agent customization
+- Magic numbers or strings embedded in logic
+- Behavior switches that only exist as code changes, not parameters
+
+### 4. Error Design Review
+
+For each public API function:
+- Does it fail clearly on wrong inputs? (TypeError, ValueError with message)
+- Or does it silently produce garbage? (returns empty DataFrame, NaN values)
+- Are error messages actionable? (tells you what was wrong AND how to fix it)
+
+### 5. Convenience Layer Gap Analysis
+
+Identify the Top-5 user workflows and measure each:
+- How many lines of code does it take?
+- Is there a convenience wrapper?
+- What boilerplate could be eliminated?
+
+| Workflow | Current Lines | Has Wrapper? | Ideal Lines |
+|----------|-------------|--------------|-------------|
+
+### 6. Generate Improvement Plan
+
+For each finding:
+- 🟢 Quick fix: add parameter, rename for clarity, add type hint
+- 🟡 Medium: extract concept into proper class, add convenience wrapper
+- 🔴 Architectural: redesign module boundary, break conceptual conflation
+
+## Constraints
+- DO NOT change application logic without user approval
+- DO NOT change public function signatures without user approval
+- Document everything — implement only 🟢 fixes
+- Preserve backward compatibility
+
+## Output
+Write to {{OUTPUT_PATH}}:
+- Conceptual model map (concepts × types × issues)
+- Orthogonality findings
+- Hardcoding inventory
+- Error design audit results
+- Convenience layer gaps (Top-5 workflows table)
+- Improvement plan (green/yellow/red categorized)
+- Priority recommendation: what to fix first for maximum agent-friendliness gain

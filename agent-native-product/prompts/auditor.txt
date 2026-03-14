@@ -1,0 +1,59 @@
+# Task: Independent Audit of Agent-Native Product Quality
+
+## Rules
+- DO NOT read transformation prompts or logs
+- DO NOT trust claims — verify by execution
+- You are a NEW agent encountering this project for the first time
+- ONLY use the project's own docs and --help as guides
+
+## Audit Checklist
+
+### Documentation (A5)
+- [ ] CLAUDE.md exists and correctly describes module structure
+- [ ] All paths referenced in CLAUDE.md actually exist
+- [ ] Build commands in CLAUDE.md work when copy-pasted
+- [ ] AGENTS.md exists (if claimed)
+- [ ] Doc-test directives (<!-- verify: -->) pass when executed
+- [ ] Data Layout section exists and paths match reality
+- [ ] Date/format conventions are explicitly documented
+- [ ] Execution semantics (matching logic, order types) are documented
+- [ ] DataFrame column names in docs match actual code output
+- [ ] Derived fields are marked as "framework-derived"
+
+### API Surface (A2)
+- [ ] Entry point --help works
+- [ ] All listed subcommands have --help
+- [ ] Flag names are consistent across commands
+- [ ] Error messages are helpful (not raw tracebacks)
+- [ ] Missing utility gaps are documented in maturity report (if applicable)
+
+### Observability (A4)
+- [ ] Health check command exists and produces structured output
+- [ ] Discovery functions return meaningful data
+- [ ] Error catalog covers common failure modes
+
+### Agent Trial (A6) — if included
+- [ ] Run the simplest documented workflow end-to-end
+- [ ] Record friction points using the standard F-N template
+- [ ] Compare friction count against ASSESS phase findings
+- [ ] Verify that critical friction points (🔴) from ASSESS are resolved
+
+### Cross-Dimension
+- [ ] CLAUDE.md references match actual CLI commands
+- [ ] Documented APIs actually exist and have correct signatures
+
+## Scoring
+Per dimension: L0-L3 based on what you VERIFIED (not claimed).
+Include evidence for each score.
+
+## Friction Log
+If performing A6 audit, use the friction log template from:
+prompts/friction_log_template.txt
+
+## Output
+Write audit_report.md:
+1. Per-dimension verified scores + evidence
+2. Doc-test results (pass/fail per directive)
+3. Critical issues (would confuse an agent)
+4. Before/after maturity matrix
+5. Friction log (if A6 audit performed)

@@ -30,14 +30,68 @@ description: "Transform an SDK/CLI/API project's interface to be agent-friendly.
 | **L2** | Structured | CLAUDE.md + AGENTS.md, consistent CLI, structured errors, health check |
 | **L3** | Enforced | Executable doc-tests, --json on all commands, discovery API, error catalog |
 
+> [!IMPORTANT]
+> **A1 (API Quality) is a prerequisite.** If the underlying API has poor orthogonality,
+> incomplete conceptual models, or missing convenience layers, then agent-native docs and
+> tooling built on top will be fragile — agents will hit the same friction regardless of
+> how good the docs are. Assess A1 first; if it scores L0-L1, prioritize API refactoring
+> over documentation generation.
+
 ## Dimensions
 
-| ID | Dimension | What It Means |
-|----|-----------|---------------|
-| A2 | **API Surface** | CLI/API consistency, structured output, error design |
-| A3 | **Environment Abstraction** | Portability, setup automation, env detection |
-| A4 | **Observability** | Health checks, discovery APIs, structured logging |
-| A5 | **Documentation** | CLAUDE.md, AGENTS.md, anti-patterns, executable doc-tests |
+| ID | Dimension | What It Means | Prerequisite? |
+|----|-----------|---------------|---------------|
+| A1 | **API Quality** | Orthogonality, conceptual model, layering | **Yes — assess first** |
+| A2 | **API Surface** | CLI/API consistency, structured output, error design | Depends on A1 |
+| A3 | **Environment Abstraction** | Portability, setup automation, env detection | No |
+| A4 | **Observability** | Health checks, discovery APIs, structured logging | No |
+| A5 | **Documentation** | CLAUDE.md, AGENTS.md, anti-patterns, executable doc-tests | Depends on A1 |
+| A6 | **Agent Trial** _(optional)_ | End-to-end agent walkthrough, friction log collection | No |
+
+### A1: API Quality — Detailed Criteria
+
+APIs should fall into two clear layers:
+
+- **Foundation layer**: Orthogonal, parameter-rich, high-cohesion/low-coupling, complete conceptual model
+- **Convenience layer**: Covers Top-5 user workflows in minimal code (1-3 lines)
+
+| Level | Foundation Layer | Convenience Layer |
+|-------|-----------------|--------------------|
+| **L0** | No clear module boundaries; functions do multiple unrelated things | No high-level helpers |
+| **L1** | Basic modules exist but concepts overlap (e.g., fill vs order vs round-trip conflated) | Some helpers, but incomplete |
+| **L2** | Orthogonal APIs; clear conceptual model; each function has single responsibility | Top-5 workflows covered |
+| **L3** | L2 + composable (APIs chain naturally); result objects have typed sub-views | Top-5 workflows are 1-liners |
+
+**Assessment checklist** (for Scout):
+
+1. **Conceptual model**: Are domain concepts (e.g., order/fill/round-trip, raw data/bar/feature) distinct types or conflated?
+2. **Orthogonality**: Can you change one concern (e.g., data source) without touching another (e.g., strategy logic)?
+3. **Parameter richness**: Do functions expose enough knobs, or are behaviors hardcoded?
+4. **Implicit dependencies**: Do modules secretly depend on fields injected elsewhere? (e.g., `time` field in aggTrade)
+5. **Error design**: Do functions fail clearly when inputs are wrong, or silently produce garbage?
+6. **Convenience coverage**: What % of the Top-5 user workflows require <3 lines? >10 lines? >50 lines?
+
+> [!NOTE]
+> **A6 is optional.** Include it when: (1) the project has a runnable workflow,
+> (2) you want to catch runtime-only issues that static assessment misses.
+> Smoke tests on quant_trading showed the most severe bugs (ZeroDivisionError,
+> wrong column names, EOD state traps) were invisible to code reading.
+
+## Prompt Files
+
+All subagent prompts live in `prompts/`. AG reads the template, fills `{{PLACEHOLDERS}}`,
+and passes the result to task-delegate.
+
+| File | Used By | Placeholders |
+|------|---------|-------------|
+| `scout.txt` | Phase 1 Scout | `PROJECT_PATH`, `LANGUAGE`, `AGENT_TRIAL_SECTION`, `OUTPUT_PATH` |
+| `scout_a6_agent_trial.txt` | Injected into Scout when A6 enabled | _(none — paste as-is into `AGENT_TRIAL_SECTION`)_ |
+| `transform_a1_api_quality.txt` | Phase 2 A1 Transformer | `PROJECT_PATH`, `LANGUAGE`, `ENTRY_POINT`, `A1_ASSESSMENT`, `OUTPUT_PATH` |
+| `transform_a5_docs.txt` | Phase 2 A5 Transformer | `PROJECT_PATH`, `LANGUAGE`, `BUILD_SYSTEM`, `A5_ASSESSMENT`, `LINE_LIMIT`, `OUTPUT_PATH` |
+| `transform_a2_api.txt` | Phase 2 A2 Transformer | `PROJECT_PATH`, `ENTRY_POINT`, `A2_ASSESSMENT`, `OUTPUT_PATH` |
+| `transform_a4_observability.txt` | Phase 2 A4 Transformer | `PROJECT_PATH`, `A4_ASSESSMENT`, `OUTPUT_PATH` |
+| `auditor.txt` | Phase 3 Auditor | _(no placeholders — auditor uses project's own docs)_ |
+| `friction_log_template.txt` | Referenced by Scout A6 + Auditor | _(template only — not a prompt)_ |
 
 ## 3-Phase Workflow
 
@@ -48,272 +102,56 @@ ASSESS (Scout) → [user ✓] → TRANSFORM (per-dim) → [user ✓] → AUDIT (
 ### Phase 1: ASSESS
 
 1. AG detects project metadata: language, build system, entry points
-2. AG dispatches **Scout** via task-delegate (read-only assessment)
-3. AG reads Scout output → writes `maturity_report.md` (L0-L3 per dimension)
-4. **✅ USER CHECKPOINT**: present maturity scores, ask which dimensions to transform
+2. AG prepares Scout prompt from `prompts/scout.txt`:
+   - Fill `{{PROJECT_PATH}}`, `{{LANGUAGE}}`, `{{OUTPUT_PATH}}`
+   - If A6 enabled: read `prompts/scout_a6_agent_trial.txt` and inject into `{{AGENT_TRIAL_SECTION}}`
+   - If A6 disabled: replace `{{AGENT_TRIAL_SECTION}}` with empty string
+3. AG dispatches **Scout** via task-delegate (read-only assessment)
+4. AG reads Scout output → writes `maturity_report.md` (L0-L3 per dimension)
+5. **✅ USER CHECKPOINT**: present maturity scores, ask which dimensions to transform
 
 ```bash
 TRANSFORM_ID="{YYYYMMDD_HHMM}_{project_name}"
 TRANSFORM_DIR="${HOME}/.agent-native-transform/${TRANSFORM_ID}/product"
 mkdir -p "${TRANSFORM_DIR}/assess"
 
-# Write Scout prompt (see SCOUT PROMPT below)
-# Launch
+# AG reads prompts/scout.txt, fills placeholders, writes to task dir
+# Launch via task-delegate
 bash ~/agent-skills/task-delegate/scripts/task_launch.sh \
   ${TRANSFORM_ID}_scout ${PROJECT_DIR} --backend cc
 ```
 
-#### SCOUT PROMPT
-
-```markdown
-# Task: Assess Agent-Native Product Maturity
-
-## Objective
-Examine this project and assess its agent-facing interface maturity.
-DO NOT modify any files. Read-only assessment.
-
-## Project
-- Path: {project_path}
-- Language: {lang}
-
-## Dimensions to Assess
-
-### A2: API Surface
-- L0: No CLI or API entry point
-- L1: CLI exists, some --help
-- L2: Consistent --help on all commands, standard exit codes
-- L3: --json output on all commands, structured error objects, machine-parseable
-Evidence: entry points, CLI frameworks, --help coverage, output formats
-
-### A3: Environment Abstraction
-- L0: Hardcoded paths, no setup
-- L1: setup.sh or requirements.txt exists
-- L2: Env vars for config, portable across machines
-- L3: Auto-detect environment, declarative config, capability query
-Evidence: setup scripts, hardcoded paths (grep /home/ /opt/ /data/), env vars
-
-### A4: Observability
-- L0: print() only
-- L1: Logging framework present
-- L2: Structured logging + health check command
-- L3: Discovery APIs (list_*), error catalog, agent-queryable metrics
-Evidence: logging config, health commands, list/discover functions
-
-### A5: Documentation
-- L0: No agent-facing docs
-- L1: README exists
-- L2: CLAUDE.md with module guide + anti-patterns
-- L3: AGENTS.md + per-module docs + executable doc-tests + negative knowledge
-Evidence: CLAUDE.md, AGENTS.md, docstrings, anti-pattern documentation
-
-## Output Format
-Write to {output_path}:
-
-### {ID}: {Name}
-**Level**: L{0-3}
-**Evidence**: {specific files/patterns}
-**Quick Win**: {easiest improvement}
-**Key Gap**: {what's missing for next level}
-
-## Summary Matrix
-| Dimension | Current | Quick Win Available |
-|-----------|---------|-------------------|
-```
-
 ### Phase 2: TRANSFORM
 
-AG processes selected dimensions. Recommended order: **A5 first** (docs are foundation),
-then A2 (API), A4 (observability), A3 (environment).
+AG processes selected dimensions. Recommended order: **A1 first** (API quality is foundation),
+then A5 (docs), A2 (surface), A4 (observability), A3 (environment).
 
 Per dimension, AG:
-1. Selects dimension-specific prompt
-2. Injects project context + assessment findings
+1. Reads the dimension-specific prompt from `prompts/transform_{dim}.txt`
+2. Fills placeholders with project context + assessment findings
 3. Dispatches Transformer via task-delegate
 4. Reads output, verifies generated files
 5. **✅ USER CHECKPOINT** per dimension
-
-#### A5 TRANSFORM: Documentation
-
-```markdown
-# Task: Generate Agent-Facing Documentation
-
-## Objective
-Create CLAUDE.md and AGENTS.md for this project so that any AI coding agent
-can immediately understand and work with the codebase.
-
-## Project
-- Path: {project_path}
-- Language: {lang}
-- Build system: {build}
-
-## Assessment Findings
-{A5 assessment from Scout}
-
-## Actions
-
-### 1. Generate CLAUDE.md (≤80 lines for complex, ≤40 for simple)
-Structure:
-- Project Overview (1-2 sentences)
-- Module Hierarchy (table: Module | Role | Key Rule)
-- Build Commands (exact, copy-pasteable)
-- Critical Rules (2-5 items, include protected paths)
-- File Conventions (auto-detect from project structure)
-
-### 2. Generate AGENTS.md (cross-tool standard)
-Same content adapted for AGENTS.md format. This is the emerging industry
-standard (40K+ projects). Keep concise — closest-file-wins proximity rule.
-
-### 3. Embed executable doc-tests
-For every command listed in CLAUDE.md/AGENTS.md, add verify directives:
-<!-- verify: {command} --dry-run -->
-or
-<!-- verify: command -v {tool} -->
-
-These enable automated staleness detection.
-
-## Constraints
-- DO NOT modify application code
-- Every path/command referenced must exist (verify with ls/test -f/command -v)
-- Keep CLAUDE.md under {line_limit} lines
-- Anti-patterns: use <!-- TODO: Add after real failures --> for section ⑤ if no incidents exist
-- DO NOT fabricate anti-patterns or troubleshooting entries
-
-## Output
-Write generated files to the project directory. Write a summary to {output_path}:
-- Files created (with purpose)
-- Doc-test directives embedded (count)
-- Paths verified (count)
-- Anything that needs user input (protected paths, etc.)
-```
-
-#### A2 TRANSFORM: API Surface
-
-```markdown
-# Task: Audit and Improve API Surface for Agent Usability
-
-## Objective
-Audit this project's CLI/API for agent-friendliness and generate improvement
-recommendations + quick fixes.
-
-## Project
-- Path: {project_path}
-- Entry point: {detected_entry}
-
-## Assessment Findings
-{A2 assessment from Scout}
-
-## Actions
-
-### 1. CLI Audit (if CLI exists)
-- Run {entry} --help and all subcommands --help
-- Check: flag naming consistency, output format, exit codes, error messages
-- Score each subcommand: consistent? structured output? good errors?
-
-### 2. API Audit (if Python API exists)
-- Check: unified entry point (api.py/__init__.py), type hints, docstrings
-- Check: return type consistency (DataFrame? dict? mixed?)
-- Check: error handling (unified exception hierarchy?)
-- Check: smart defaults vs required params
-
-### 3. Generate improvement plan
-For each finding, categorize:
-- 🟢 Quick fix (1-line change, e.g., add --json flag)
-- 🟡 Medium effort (add structured error class)
-- 🔴 Architectural (redesign return types)
-
-### 4. Implement quick fixes (🟢 only)
-If the fix is safe and obvious, implement it. Otherwise, document it.
-
-## Constraints
-- DO NOT change application logic
-- DO NOT change function signatures without user approval
-- Quick fixes only — document everything else as recommendations
-
-## Output
-Write to {output_path}:
-- Audit results per command/function
-- Improvement plan (categorized green/yellow/red)
-- Files modified (if any quick fixes applied)
-- Recommended next steps
-```
-
-#### A4 TRANSFORM: Observability
-
-```markdown
-# Task: Bootstrap Observability for Agent Self-Diagnosis
-
-## Objective
-Add minimal observability infrastructure so agents can self-diagnose issues.
-
-## Actions
-### 1. Health check command (if none exists)
-- Create a `doctor` or `check` subcommand that verifies:
-  * Dependencies installed
-  * Config files present
-  * Connectivity (if applicable)
-- Output: structured (JSON verdict + per-check pass/fail)
-
-### 2. Discovery functions (if Python API exists)
-- Create `list_*()` functions for discovering available resources
-- At minimum: list what data/configs/plugins exist
-
-### 3. Error catalog (documentation)
-- Document top-10 most common errors with: cause + fix
-- Add to CLAUDE.md or separate error_catalog.md
-
-## Constraints
-- Keep health check lightweight (< 5s)
-- Discovery functions must return structured data (list/dict), not print()
-```
 
 ### Phase 3: AUDIT
 
 **Executor ≠ Verifier**: Auditor runs on a DIFFERENT backend than Transformer.
 
-```markdown
-# Task: Independent Audit of Agent-Native Product Quality
+AG reads `prompts/auditor.txt` and dispatches the Auditor. The auditor prompt has
+expanded checks that align with A5 mandatory documentation items and A6 Agent Trial.
 
-## Rules
-- DO NOT read transformation prompts or logs
-- DO NOT trust claims — verify by execution
-- You are a NEW agent encountering this project for the first time
-- ONLY use the project's own docs and --help as guides
+## Friction Log Standard
 
-## Audit Checklist
+> [!TIP]
+> The standard friction log format is defined in `prompts/friction_log_template.txt`.
+> It is used by Scout (A6 sub-task) and Auditor (A6 audit). AG should also use this
+> format when documenting friction from any manual testing.
 
-### Documentation (A5)
-- [ ] CLAUDE.md exists and correctly describes module structure
-- [ ] All paths referenced in CLAUDE.md actually exist
-- [ ] Build commands in CLAUDE.md work when copy-pasted
-- [ ] AGENTS.md exists (if claimed)
-- [ ] Doc-test directives (<!-- verify: -->) pass when executed
-
-### API Surface (A2)
-- [ ] Entry point --help works
-- [ ] All listed subcommands have --help
-- [ ] Flag names are consistent across commands
-- [ ] Error messages are helpful (not raw tracebacks)
-
-### Observability (A4)
-- [ ] Health check command exists and produces structured output
-- [ ] Discovery functions return meaningful data
-- [ ] Error catalog covers common failure modes
-
-### Cross-Dimension
-- [ ] CLAUDE.md references match actual CLI commands
-- [ ] Documented APIs actually exist and have correct signatures
-
-## Scoring
-Per dimension: L0-L3 based on what you VERIFIED (not claimed).
-Include evidence for each score.
-
-## Output
-Write audit_report.md:
-1. Per-dimension verified scores + evidence
-2. Doc-test results (pass/fail per directive)
-3. Critical issues (would confuse an agent)
-4. Before/after maturity matrix
-```
+Severity classification:
+- 🔴 **Blocker**: Crashes, data loss, cannot proceed
+- 🟡 **Misleading**: Docs say X but reality is Y
+- 🟢 **Missing**: Feature absent, user writes boilerplate
+- ⚪ **Friction**: Works but confusing or surprising
 
 ## Mandatory Rules
 
@@ -324,6 +162,7 @@ Write audit_report.md:
 5. **No fabrication** — if no real failures exist, use `<!-- TODO: Add after real incidents -->`
 6. **Verify all references** — every path/command in generated docs must actually exist
 7. **CLAUDE.md length limit** — ≤40 lines simple project, ≤80 lines complex
+8. **Prompts in files** — all subagent prompts live in `prompts/`, not inline in SKILL.md
 
 ## Anti-Patterns
 
@@ -335,7 +174,7 @@ Write audit_report.md:
    → Empty honesty > fabricated completeness. Use <!-- TODO --> markers
 
 ❌ Single monolithic "transform everything" prompt
-   → Each dimension gets its own focused prompt
+   → Each dimension gets its own focused prompt file
 
 ❌ Transformer and Auditor are the same subagent session
    → Violates Executor ≠ Verifier. Auditor must have fresh eyes
@@ -348,6 +187,12 @@ Write audit_report.md:
 
 ❌ Skipping ASSESS and jumping to TRANSFORM
    → Without baseline, can't measure improvement or set targets
+
+❌ Inlining prompts in SKILL.md instead of using prompts/ files
+   → Prompts are versioned separately, easier to iterate
+
+❌ Skipping A6 Agent Trial when user opted in, reporting only static assessment
+   → Static reading misses runtime-only bugs (ZeroDivisionError, state traps, wrong column names)
 ```
 
 ## Troubleshooting
@@ -360,6 +205,7 @@ Write audit_report.md:
 | Project has no CLI (library only) | Skip A2. Focus on A5 (documentation) and A4 (discovery API) |
 | Doc-test verify directives fail | Either command changed or was wrong. Update CLAUDE.md |
 | AGENTS.md conflicts with CLAUDE.md | AGENTS.md is cross-tool source of truth. CLAUDE.md adds Claude-specific info only |
+| A6 Agent Trial takes too long | Set a time/friction-count cap in Scout prompt. Stop at 10 friction points |
 
 ## Composability
 
@@ -369,3 +215,4 @@ Write audit_report.md:
 | agent-native-product → agent-native-devflow | Product docs inform dev process setup |
 | agent-native-product (audit only) | Re-run Phase 3 periodically to detect drift |
 | sdk-audit → agent-native-product | Existing audit findings feed ASSESS |
+| smoke-test → agent-native-product | Friction log from external test feeds ASSESS + TRANSFORM |

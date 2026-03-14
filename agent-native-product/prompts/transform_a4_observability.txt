@@ -1,0 +1,38 @@
+# Task: Bootstrap Observability for Agent Self-Diagnosis
+
+## Objective
+Add minimal observability infrastructure so agents can self-diagnose issues.
+
+## Project
+- Path: {{PROJECT_PATH}}
+
+## Assessment Findings
+{{A4_ASSESSMENT}}
+
+## Actions
+
+### 1. Health check command (if none exists)
+- Create a `doctor` or `check` subcommand that verifies:
+  * Dependencies installed
+  * Config files present
+  * Connectivity (if applicable)
+- Output: structured (JSON verdict + per-check pass/fail)
+
+### 2. Discovery functions (if Python API exists)
+- Create `list_*()` functions for discovering available resources
+- At minimum: list what data/configs/plugins exist
+
+### 3. Error catalog (documentation)
+- Document top-10 most common errors with: cause + fix
+- Add to CLAUDE.md or separate error_catalog.md
+
+## Constraints
+- Keep health check lightweight (< 5s)
+- Discovery functions must return structured data (list/dict), not print()
+
+## Output
+Write to {{OUTPUT_PATH}}:
+- Health check implementation (if created)
+- Discovery functions added (list)
+- Error catalog entries (count)
+- Files created/modified

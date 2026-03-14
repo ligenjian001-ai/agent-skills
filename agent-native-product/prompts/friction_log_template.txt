@@ -1,0 +1,34 @@
+# Friction Log Template
+
+Use this format for every friction point discovered during Agent Trial (A6)
+or independent audit. Number sequentially starting from F-1.
+
+---
+
+## F-{N}: {one-line title}
+
+- **Scene**: What you were trying to do (the task context)
+- **Expected**: What the docs or API led you to expect
+- **Actual**: What actually happened (include error messages, wrong outputs)
+- **Resolution**: How you worked around it (code changes, manual steps)
+- **Suggestion**: What the framework should change (API fix, doc addition, default change)
+
+---
+
+## Classification Guide
+
+After recording all points, classify each by severity:
+
+| Severity | Criteria | Example |
+|----------|----------|---------|
+| 🔴 Blocker | Crashes, data loss, cannot proceed | ZeroDivisionError in matching engine (F-9) |
+| 🟡 Misleading | Docs say X but reality is Y | Column name `vol` vs `volume` mismatch (F-10) |
+| 🟢 Missing | Feature absent, user writes boilerplate | No built-in performance analytics (F-4) |
+| ⚪ Friction | Works but confusing or surprising | Bar lifecycle semantics unclear (F-7) |
+
+## Summary Table
+
+| F-N | Title | Severity | Category |
+|-----|-------|----------|----------|
+| F-1 | ... | 🟡 | A5: Docs |
+| F-2 | ... | 🟡 | A5: Docs |

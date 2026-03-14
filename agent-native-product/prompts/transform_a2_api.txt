@@ -1,0 +1,69 @@
+# Task: Audit and Improve API Surface for Agent Usability
+
+## Objective
+Audit this project's CLI/API for agent-friendliness and generate improvement
+recommendations + quick fixes.
+
+## Project
+- Path: {{PROJECT_PATH}}
+- Entry point: {{ENTRY_POINT}}
+
+## Assessment Findings
+{{A2_ASSESSMENT}}
+
+## Actions
+
+### 1. CLI Audit (if CLI exists)
+- Run {entry} --help and all subcommands --help
+- Check: flag naming consistency, output format, exit codes, error messages
+- Score each subcommand: consistent? structured output? good errors?
+
+### 2. API Audit (if Python API exists)
+- Check: unified entry point (api.py/__init__.py), type hints, docstrings
+- Check: return type consistency (DataFrame? dict? mixed?)
+- Check: error handling (unified exception hierarchy?)
+- Check: smart defaults vs required params
+
+### 3. Missing Utility Detection ⭐ (smoke-test-driven)
+
+When 3 independent agents all write the same boilerplate code (~80-150 lines each),
+it means the framework is missing a critical utility. Actively check for:
+
+| Utility Category | What to Look For | Failure Ref |
+|-----------------|-----------------|-------------|
+| **Performance Analytics** | `performance_report()`, `analyze()`, Sharpe/drawdown/win-rate calculator | F-4: all 3 agents wrote ~80 lines of identical metrics code |
+| **Parameter Sweep** | `grid_search()`, `param_sweep()`, optimization utilities | F-14: all agents wrote ~50 lines of nested-loop sweep code |
+| **Strategy Comparison** | `compare_strategies()`, A/B testing, side-by-side metrics | F-11: agents wrote ~100 lines of comparison boilerplate |
+| **Execution Comparison** | `compare_backtest_vs_live()`, slippage analysis | F-12: agents wrote ~150 lines of backtest-vs-live diff code |
+
+**Process**:
+1. Search for each utility category in the codebase (function names, module names)
+2. If found: verify it's documented and usable
+3. If NOT found: flag as A2 gap in the report with severity based on how commonly agents would need it
+
+**Classification**:
+- 🔴 Critical gap: every agent user will need this (e.g., performance analytics)
+- 🟡 Important gap: most agent users will need this (e.g., param sweep)
+- 🟢 Nice to have: some users will benefit (e.g., execution comparison)
+
+### 4. Generate improvement plan
+For each finding, categorize:
+- 🟢 Quick fix (1-line change, e.g., add --json flag)
+- 🟡 Medium effort (add structured error class)
+- 🔴 Architectural (redesign return types)
+
+### 5. Implement quick fixes (🟢 only)
+If the fix is safe and obvious, implement it. Otherwise, document it.
+
+## Constraints
+- DO NOT change application logic
+- DO NOT change function signatures without user approval
+- Quick fixes only — document everything else as recommendations
+
+## Output
+Write to {{OUTPUT_PATH}}:
+- Audit results per command/function
+- Missing utility gaps (table: category | status | severity)
+- Improvement plan (categorized green/yellow/red)
+- Files modified (if any quick fixes applied)
+- Recommended next steps

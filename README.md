@@ -49,6 +49,7 @@ graph TB
 
     subgraph "🛠️ 功能扩展"
         BU["browser-use"] & JK["jenkins-ops"] & IR["infra-request"]
+        ANP["agent-native-product\n产品 agent 化改造"]
     end
 
     subgraph "📦 基础设施"
@@ -80,8 +81,9 @@ graph TB
     DA -->|分析| IPC4
     SD -->|设计| IPC5
     DR -.->|读取| IPC1 & IPC2 & IPC3
-    AG --> BU & JK & IR
-    TD & PD & BI & DA & SD & JK & BU -->|终端| TMUX
+    AG --> BU & JK & IR & ANP
+    ANP -->|wrapper| TD
+    TD & PD & BI & DA & SD & JK & BU --> |终端| TMUX
 ```
 
 ### 数据流
@@ -93,6 +95,7 @@ graph TB
 | `~/.bug-investigations/` | Bug 调查编排数据（context, verdict） | bug-investigation | daily-report |
 | `~/.deep-analysis/` | 多维度分析数据（aspects, analyst/challenger 输出, system_map） | deep-analysis | system-design, daily-report |
 | `~/.system-design/` | 设计数据（sketch, decide, spike, blueprint） | system-design | infra-request, daily-report |
+| `~/.agent-native-transform/` | 产品 agent 化改造数据（assess, transform, audit） | agent-native-product | daily-report |
 | `brain/{conv_id}/` | 对话 journal + subagent tracking | ag-archive | daily-report |
 
 **双向链接**：`execution_record.json` 的 `source_conversation` → `brain/{conv_id}/`，journal 的 `[subagent]` tag → `~/.task-delegate/{task_id}/`
@@ -131,6 +134,7 @@ graph TB
 | [browser-use](browser-use/) | 浏览器自动化 — browser-use + Gemini Flash，比 AG 内置快 2-9x |
 | [jenkins-ops](jenkins-ops/) | Jenkins CI/CD — 触发、监控、配置、排障 |
 | [infra-request](infra-request/) | 基建需求 — GitHub Issues 提交 + 验证 + Tool Integration Plan |
+| [agent-native-product](agent-native-product/) | 产品 agent 化改造 — ASSESS(A2-A6) → TRANSFORM → AUDIT，含 Agent Trial + Friction Log |
 
 ## 技能间协作关系
 
@@ -146,3 +150,5 @@ graph TB
 | `daily-report` → `ag-archive` + `task-delegate` + `panel-discussion` | 扫描 IPC 目录生成日报 |
 | `all terminal skills` → `tmux-protocol` | 所有涉及终端的操作必须遵循 tmux 协议 |
 | `all skills` → `skill-creator` | 文档标准：SKILL.md (agent) + README.md (human) |
+| `agent-native-product` → `task-delegate` | Scout/Transformer/Auditor 通过 task-delegate dispatch |
+| `deep-analysis` → `agent-native-product` | system_map.md 可作为 ASSESS 输入 |

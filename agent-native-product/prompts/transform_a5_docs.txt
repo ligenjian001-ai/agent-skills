@@ -1,0 +1,67 @@
+# Task: Generate Agent-Facing Documentation
+
+## Objective
+Create CLAUDE.md and AGENTS.md for this project so that any AI coding agent
+can immediately understand and work with the codebase.
+
+## Project
+- Path: {{PROJECT_PATH}}
+- Language: {{LANGUAGE}}
+- Build system: {{BUILD_SYSTEM}}
+
+## Assessment Findings
+{{A5_ASSESSMENT}}
+
+## Actions
+
+### 1. Generate CLAUDE.md (≤80 lines for complex, ≤40 for simple)
+Structure:
+- Project Overview (1-2 sentences)
+- Module Hierarchy (table: Module | Role | Key Rule)
+- Build Commands (exact, copy-pasteable)
+- Critical Rules (2-5 items, include protected paths)
+- File Conventions (auto-detect from project structure)
+
+### 2. Generate AGENTS.md (cross-tool standard)
+Same content adapted for AGENTS.md format. This is the emerging industry
+standard (40K+ projects). Keep concise — closest-file-wins proximity rule.
+
+### 3. Embed executable doc-tests
+For every command listed in CLAUDE.md/AGENTS.md, add verify directives:
+<!-- verify: {command} --dry-run -->
+or
+<!-- verify: command -v {tool} -->
+
+These enable automated staleness detection.
+
+### 4. Mandatory Documentation Checks ⭐ (smoke-test-driven)
+
+Before finalizing CLAUDE.md/AGENTS.md, verify the following items are covered.
+These checks come from real agent friction — every item maps to a documented failure.
+
+| Check | What to Document | Failure Ref |
+|-------|-----------------|-------------|
+| **Data Layout** | If the project has data files, document directory structure and file naming patterns. Show example paths. | F-1: agents couldn't find data files |
+| **Date/Format Conventions** | All API date/time input formats must be explicitly stated. If internal conversion exists, note it. | F-2: YYYYMMDD vs YYYY-MM-DD confusion |
+| **Execution Semantics** | For engines (backtest, simulation, matching): document the core matching/execution logic. What order types exist? How are fills determined? | F-5: LIMIT order adverse selection was invisible |
+| **Lifecycle Documentation** | Stateful components (agents, sessions, buffers) must have their lifecycle documented: init → steady state → teardown. What happens at boundaries (EOD, end of backtest)? | F-7: BarAgent check-before-feed semantics; F-13: SessionAgent EOD clear trap |
+| **Column Name Verification** | For every API that returns a DataFrame/dict, verify column/field names against actual code. Run the API and check output columns. Never copy column names from old docs without verification. | F-10: doc said 'vol', code returns 'volume' |
+| **Derived Fields** | If the framework adds derived fields to data structures (e.g., adding 'time' to a raw dict), document these fields explicitly. Mark them as "derived by framework, not in raw data". | F-15: undocumented 'time' field in aggTrade dict |
+
+**Process**: For each check, grep the codebase + run a minimal example if possible.
+If a check is not applicable (e.g., no data files), skip it and note why.
+
+## Constraints
+- DO NOT modify application code
+- Every path/command referenced must exist (verify with ls/test -f/command -v)
+- Keep CLAUDE.md under {{LINE_LIMIT}} lines
+- Anti-patterns: use <!-- TODO: Add after real failures --> for section ⑤ if no incidents exist
+- DO NOT fabricate anti-patterns or troubleshooting entries
+
+## Output
+Write generated files to the project directory. Write a summary to {{OUTPUT_PATH}}:
+- Files created (with purpose)
+- Doc-test directives embedded (count)
+- Paths verified (count)
+- Mandatory checks completed (table: check | status | notes)
+- Anything that needs user input (protected paths, etc.)
