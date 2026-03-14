@@ -137,25 +137,17 @@ If `run_command` returns a "Background command ID":
 ❌ WRONG: Background with Exit code 0 → "Got background, let me retry"
 ```
 
-## User Cancel Recovery
+## run_command Hang Recovery
 
-If the user cancels a `run_command` mid-execution, subsequent `run_command` calls **may permanently hang** (stuck RUNNING). This is an AG framework bug, not a tmux issue.
+`run_command` calls may intermittently hang (stuck RUNNING). This is an AG framework scheduling bug. It can happen on the **first command** in a conversation — no prior cancel required.
 
-**Symptoms**: `capture-pane` or other instant commands show RUNNING for >10 seconds.
+**Symptoms**: `run_command` shows RUNNING indefinitely. The command itself is instant in bash.
 
 **What to do**:
 
-1. ❌ Do NOT kill/recreate the tmux session (problem is not tmux)
-2. ❌ Do NOT retry `run_command` (execution layer lock is stuck)
-3. ❌ Do NOT bypass tmux with bare `run_command` to "read files quickly" — this is the #1 fallback anti-pattern
-4. ✅ **Use `view_file`** to read files (live.log, execution_record.json, etc.) — file reads don't need terminal
-5. ✅ **Tell the user**: "Terminal execution may be broken after the cancel. Recommend starting a new conversation."
-6. ✅ Continue with non-terminal tools (`view_file`, `write_to_file`, `grep_search`, etc.)
-
-> [!CAUTION]
-> **Fallback 冲动的根因**：AG 没有区分 "需要终端的操作"（如 send-keys, capture-pane）和 "只需读文件的操作"（如读 live.log）。
-> 监控 task-delegate 日志 **完全可以用 view_file**，根本不需要走终端。
-> 即使终端完全坏掉，AG 的监控能力也不应受影响。
+1. ✅ **Tell the user**: suggest cancel + continue (resets AG scheduling state)
+2. ✅ Continue with non-terminal tools (`view_file`, `write_to_file`, `grep_search`)
+3. If repeated cancel+continue fails, suggest starting a new conversation
 
 See `AG_TERMINAL_BEHAVIOR.md` Section 11 for full analysis.
 

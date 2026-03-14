@@ -157,51 +157,56 @@ WaitMsBeforeAsync = 3000ms 的实际分配：
 
 ---
 
-## 11. User Cancel 后的 run_command 卡死问题
+## 11. run_command 间歇性卡住问题
 
 > [!CAUTION]
-> 这是 AG **框架级 bug**，不是 tmux 问题。tmux session 内部完全正常，问题在 AG 的命令执行层。
+> 这是 AG **框架级 bug**，不是 tmux 问题。所有涉及的命令在裸 bash 中秒完成。
 
-### 触发条件
+### 经验证的现象（用户实际观察）
 
-用户在 AG UI 中取消一个正在执行的 `run_command`（例如 `capture-pane`），之后该 conversation 中的后续 `run_command` 调用可能永久卡在 RUNNING 状态。
-
-### 观察到的行为
-
-```
-Step 104: tmux send-keys -t {id} 'stat ...' Enter     ✅ Background ID（正常）
-Step 107: tmux capture-pane -t {id} -p -S -15          ❌ 被用户取消
-Step 111: tmux capture-pane -t {id} -p -S -10          ⚠️ 永久 RUNNING（capture-pane 是即时命令，应 <1s 完成）
-Step 123: tmux kill-session / new-session              ❌ 被用户取消（无效操作，问题不在 tmux）
-```
+| 观察 | 含义 |
+|------|------|
+| 命令在 bash 里秒完成 | 排除 tmux/脚本问题 |
+| 对话中**第一条** `run_command` 就卡住 | 排除 "前序 cancel 导致锁泄漏" |
+| 多会话阻塞**不稳定**复现 | 排除确定性资源竞争 |
+| cancel + continue 后命令**正常执行** | 排除执行层永久损坏 |
 
 ### 根因分析
 
-`run_command` 执行层内部可能维护了命令队列或互斥锁。用户取消操作中断了正在执行的命令，但**没有正确清理执行层的内部状态**（例如未释放的锁、未完成的异步回调）。后续命令被阻塞在获取该锁/等待上游完成的环节。
+**AG `run_command` 调度/IPC 层的间歇性卡顿。** 不是锁泄漏，不是永久损坏。
 
-关键区分：
+```
+模型生成 tool calls → AG 框架排队执行 → [这里偶尔卡住] → 命令实际启动
+                                           ↑
+                                    调度/IPC 瞬态延迟
+                                    cancel 重置了这个状态
+                                    continue 重新触发 → 通了
+```
 
-| 层级 | 状态 | 证据 |
-|------|------|------|
-| tmux session | ✅ 正常 | Step 49-85 的 send-keys/capture-pane 全部工作 |
-| AG run_command | ❌ 损坏 | Step 111 的即时命令永久 RUNNING |
+可能的触发点（推测，未验证）：
+
+1. **`waitForPreviousTools=true` 同步机制 bug** — 前序 tool（如 `view_file`）的完成信号丢失 → `run_command` 永久等待
+2. **AG 进程与执行后端的 IPC 偶发延迟** — RPC/socket 连接建立超时
+3. **Shell 进程池初始化延迟** — 首次 `run_command` 需要 spawn 新 shell，系统资源紧张时超时
 
 ### 恢复方法
 
-**没有 conversation 内的恢复方法。** 一旦触发，当前对话的 `run_command` 执行层已不可恢复。
-
-- ❌ kill-session + new-session **无效**（问题不在 tmux）
-- ❌ 重试 run_command **无效**（执行层锁未释放）
-- ✅ **唯一恢复方式：用户开新对话**（新 conversation = 新的 run_command 执行层实例）
+- ✅ **cancel + continue**（最有效，瞬态问题可恢复）
+- ✅ **切换到非终端工具**（`view_file`, `write_to_file`, `grep_search` 等仍可用）
+- ❌ 发更多 `run_command` **无效**（只会堆积更多卡住的调用）
 
 ### 模型行为指引
 
-当检测到 `capture-pane` 等即时命令超过 10 秒仍 RUNNING 时：
+当 `run_command` 卡住时：
 
-1. **不要 kill tmux session**——问题不在 tmux
-2. **不要反复重试**——只会堆积更多卡住的命令
-3. **告知用户**："run_command 执行层可能在之前的取消操作后损坏，建议开启新对话继续工作"
-4. **在当前对话中切换到非终端工作模式**（file I/O, codebase search 等仍可用）
+1. **告知用户**：建议 cancel 当前操作然后 continue
+2. **切换到非终端工具继续工作**
+3. **如果反复 cancel+continue 仍无法恢复**，建议开新对话
+
+### 历史注释
+
+> 本节之前的版本（2026-03-05）将问题归因于 "user cancel 导致 run_command 执行层锁泄漏"。
+> 该分析已被用户的经验观察否定（2026-03-14），特别是 "第一条命令就卡" 和 "cancel+continue 可恢复" 两个现象与锁泄漏假说矛盾。
 
 ---
 
