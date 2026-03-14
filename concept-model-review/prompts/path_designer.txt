@@ -1,0 +1,110 @@
+# Task: Design Concept Opening Path
+
+## Objective
+Design the optimal path for a user (or AI agent) to understand and use this project's
+conceptual model from scratch. The path should go from zero knowledge to productive use
+of the Top-5 workflows.
+
+## Project
+- Path: {{PROJECT_PATH}}
+
+## Input: Concept Map
+{{CONCEPT_MAP}}
+
+## Input: Model Evaluation
+{{EVALUATION}}
+
+## Input: Top-5 User Workflows
+{{TOP_WORKFLOWS}}
+
+## What Makes a Good Opening Path
+
+A good opening path has these properties:
+
+1. **Progressive disclosure**: each step reveals exactly one new concept
+2. **Immediate payoff**: after learning each concept, user can DO something they couldn't before
+3. **Natural ordering**: later concepts build on earlier ones without backtracking
+4. **Workflow-aligned**: the sequence is driven by what users want to DO, not how the code is organized
+
+## Steps
+
+### 1. Identify Entry Concept
+
+Find the concept that:
+- Is the first thing a user encounters when starting any workflow
+- Has the fewest prerequisites
+- Is the most intuitive / closest to the user's mental model
+
+There should be exactly ONE entry concept. If there are multiple candidates,
+explain the trade-off and recommend one.
+
+### 2. Build Learning Sequence
+
+Order all concepts into a learning sequence where:
+- Each concept only depends on previously learned concepts
+- After each step, the user can complete at least one meaningful operation
+- The sequence reaches "productive use" (Top-3 workflows) within 5-7 steps
+
+For each step in the sequence:
+- **Concept**: what to learn
+- **Prerequisites**: what concepts must be understood first (should all be earlier in sequence)
+- **Payoff**: what the user can now DO (specific operation, not just "understand X")
+- **Minimal code**: shortest example demonstrating this concept in action
+- **Trap to avoid**: the most likely mistake at this stage (from implicit concepts or naming issues)
+
+### 3. Map Workflows to Concepts
+
+For each of the Top-5 workflows:
+- Which concepts are needed?
+- What is the learning sequence position of the "last" concept needed?
+  (This tells us: after step N, this workflow becomes possible)
+- Current lines of code required vs ideal
+
+### 4. Generate Opening Path Diagram
+
+Create a visual representation:
+- Nodes = concepts
+- Edges = recommended learning order
+- Color = layer (foundation / convenience)
+- Annotation = which step number + which workflows unlock at each node
+
+## Output
+Write to {{OUTPUT_PATH}}:
+
+```markdown
+# Concept Opening Path: {project_name}
+
+## Entry Point
+**{concept_name}**: {why this is the best starting point}
+
+## Learning Sequence
+
+### Step 1: {concept_name}
+- **What it is**: {one sentence}
+- **After this step, you can**: {concrete payoff}
+- **Minimal example**:
+  ```{language}
+  {3-5 lines of code}
+  ```
+- **⚠️ Trap**: {most likely mistake}
+
+### Step 2: {concept_name}
+...
+
+## Workflow Readiness Map
+| Workflow | Concepts Needed | Unlocked at Step | Current Lines | Ideal Lines |
+|----------|----------------|-----------------|--------------|-------------|
+
+## Opening Path Diagram
+```mermaid
+graph TD
+    ...
+```
+
+## Recommendations
+### Quick Wins (improve opening path without changing concept model)
+- ...
+
+### Structural Improvements (require concept model changes)
+- ...
+```

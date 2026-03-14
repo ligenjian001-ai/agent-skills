@@ -30,46 +30,27 @@ description: "Transform an SDK/CLI/API project's interface to be agent-friendly.
 | **L2** | Structured | CLAUDE.md + AGENTS.md, consistent CLI, structured errors, health check |
 | **L3** | Enforced | Executable doc-tests, --json on all commands, discovery API, error catalog |
 
-> [!IMPORTANT]
-> **A1 (API Quality) is a prerequisite.** If the underlying API has poor orthogonality,
-> incomplete conceptual models, or missing convenience layers, then agent-native docs and
-> tooling built on top will be fragile — agents will hit the same friction regardless of
-> how good the docs are. Assess A1 first; if it scores L0-L1, prioritize API refactoring
-> over documentation generation.
+> **A1 (Conceptual Model) is a prerequisite.** If the underlying conceptual model has
+> poor orthogonality, incomplete abstractions, or missing convenience layers, then
+> agent-native docs and tooling built on top will be fragile. Use `concept-model-review`
+> skill for deep A1 assessment; results feed into this skill's ASSESS phase.
 
 ## Dimensions
 
 | ID | Dimension | What It Means | Prerequisite? |
 |----|-----------|---------------|---------------|
-| A1 | **API Quality** | Orthogonality, conceptual model, layering | **Yes — assess first** |
+| A1 | **Conceptual Model** | Completeness, orthogonality, layering, opening path | **Yes — use `concept-model-review`** |
 | A2 | **API Surface** | CLI/API consistency, structured output, error design | Depends on A1 |
 | A3 | **Environment Abstraction** | Portability, setup automation, env detection | No |
 | A4 | **Observability** | Health checks, discovery APIs, structured logging | No |
 | A5 | **Documentation** | CLAUDE.md, AGENTS.md, anti-patterns, executable doc-tests | Depends on A1 |
 | A6 | **Agent Trial** _(optional)_ | End-to-end agent walkthrough, friction log collection | No |
 
-### A1: API Quality — Detailed Criteria
-
-APIs should fall into two clear layers:
-
-- **Foundation layer**: Orthogonal, parameter-rich, high-cohesion/low-coupling, complete conceptual model
-- **Convenience layer**: Covers Top-5 user workflows in minimal code (1-3 lines)
-
-| Level | Foundation Layer | Convenience Layer |
-|-------|-----------------|--------------------|
-| **L0** | No clear module boundaries; functions do multiple unrelated things | No high-level helpers |
-| **L1** | Basic modules exist but concepts overlap (e.g., fill vs order vs round-trip conflated) | Some helpers, but incomplete |
-| **L2** | Orthogonal APIs; clear conceptual model; each function has single responsibility | Top-5 workflows covered |
-| **L3** | L2 + composable (APIs chain naturally); result objects have typed sub-views | Top-5 workflows are 1-liners |
-
-**Assessment checklist** (for Scout):
-
-1. **Conceptual model**: Are domain concepts (e.g., order/fill/round-trip, raw data/bar/feature) distinct types or conflated?
-2. **Orthogonality**: Can you change one concern (e.g., data source) without touching another (e.g., strategy logic)?
-3. **Parameter richness**: Do functions expose enough knobs, or are behaviors hardcoded?
-4. **Implicit dependencies**: Do modules secretly depend on fields injected elsewhere? (e.g., `time` field in aggTrade)
-5. **Error design**: Do functions fail clearly when inputs are wrong, or silently produce garbage?
-6. **Convenience coverage**: What % of the Top-5 user workflows require <3 lines? >10 lines? >50 lines?
+> [!TIP]
+> A1 assessement is handled by `concept-model-review` skill (DISCOVER → EVALUATE → PATH DESIGN).
+> Its output (`concept_map.md` + evaluation + opening path) feeds directly into this skill's
+> Phase 1 ASSESS as pre-existing context. If concept-model-review was already run, Scout
+> can skip A1 and use its output.
 
 > [!NOTE]
 > **A6 is optional.** Include it when: (1) the project has a runnable workflow,

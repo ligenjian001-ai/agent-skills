@@ -1,0 +1,91 @@
+# Task: Discover Core Conceptual Model
+
+## Objective
+Extract and map the core conceptual model of this project. Identify all domain concepts
+(both explicit and implicit), their relationships, and the layering structure.
+
+DO NOT modify any files. This is a read-only discovery task.
+
+## Project
+- Path: {{PROJECT_PATH}}
+- Language: {{LANGUAGE}}
+- Product description: {{PRODUCT_DESCRIPTION}}
+
+## What to Look For
+
+### 1. Explicit Concepts
+Concepts that have clear names in the code (classes, types, key data structures).
+
+For each concept, document:
+- **Name**: as used in code
+- **Type**: class / dataclass / TypedDict / DataFrame schema / function group / module
+- **Module**: where it lives
+- **Responsibility**: what it represents, single sentence
+- **Dependencies**: what other concepts it needs
+
+### 2. Implicit Concepts
+Abstractions that EXIST in the code's behavior but are NOT named or typed.
+
+Common patterns to look for:
+- **Injected fields**: data fields silently added by framework code (e.g., a dict gains a `time` key after passing through a loader)
+- **Lifecycle phases**: state transitions that happen implicitly (e.g., on_eod clears internal state)
+- **Convention-based behavior**: things that work because of naming patterns, not explicit API
+- **Cross-cutting state**: global or module-level state that affects behavior silently
+
+For each implicit concept:
+- **Behavior**: what it does
+- **Where it appears**: file(s) and function(s)
+- **Why it's implicit**: why there's no named abstraction for it
+- **Suggested name**: what you'd call it if you were to make it explicit
+- **Risk level**: 🔴 (causes bugs when unknown), 🟡 (causes confusion), 🟢 (minor)
+
+### 3. Concept Relationships
+How concepts relate to each other:
+- **Depends on**: A needs B to function
+- **Composes**: A contains B
+- **Transforms**: A produces B
+- **Extends**: A is a specialization of B
+- **Conflicts**: A and B have overlapping responsibilities (concept debt)
+
+### 4. Layering
+Identify the natural layers:
+- **Foundation layer**: low-level, parameter-rich, orthogonal primitives
+- **Convenience layer**: high-level helpers that compose foundation concepts
+- **Missing layer**: gaps where users must write boilerplate to bridge layers
+
+## Output
+Write to {{OUTPUT_PATH}}:
+
+```markdown
+# Concept Map: {project_name}
+
+## Product Position
+{One sentence: what this product claims to do}
+
+## Explicit Concepts
+| Concept | Type | Module | Responsibility | Dependencies |
+|---------|------|--------|---------------|-------------|
+
+## Implicit Concepts
+| Behavior | Where | Why Implicit | Suggested Name | Risk |
+|----------|-------|-------------|---------------|------|
+
+## Concept Relationship Graph
+```mermaid
+graph TD
+    ...
+```
+
+## Layering Analysis
+### Foundation Layer
+- ...
+
+### Convenience Layer
+- ...
+
+### Missing Layer (Gaps)
+- ...
+
+## Concept Debt Summary
+{List the most problematic concept issues: conflation, missing abstractions, implicit dependencies}
+```

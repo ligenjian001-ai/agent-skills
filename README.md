@@ -50,6 +50,7 @@ graph TB
     subgraph "🛠️ 功能扩展"
         BU["browser-use"] & JK["jenkins-ops"] & IR["infra-request"]
         ANP["agent-native-product\n产品 agent 化改造"]
+        CMR["concept-model-review\n概念模型审计"]
     end
 
     subgraph "📦 基础设施"
@@ -81,8 +82,10 @@ graph TB
     DA -->|分析| IPC4
     SD -->|设计| IPC5
     DR -.->|读取| IPC1 & IPC2 & IPC3
-    AG --> BU & JK & IR & ANP
+    AG --> BU & JK & IR & ANP & CMR
     ANP -->|wrapper| TD
+    CMR -->|wrapper| TD
+    CMR -->|concept_map| ANP
     TD & PD & BI & DA & SD & JK & BU --> |终端| TMUX
 ```
 
@@ -96,6 +99,7 @@ graph TB
 | `~/.deep-analysis/` | 多维度分析数据（aspects, analyst/challenger 输出, system_map） | deep-analysis | system-design, daily-report |
 | `~/.system-design/` | 设计数据（sketch, decide, spike, blueprint） | system-design | infra-request, daily-report |
 | `~/.agent-native-transform/` | 产品 agent 化改造数据（assess, transform, audit） | agent-native-product | daily-report |
+| `~/.concept-model-review/` | 概念模型审计数据（discover, evaluate, path_design） | concept-model-review | agent-native-product, daily-report |
 | `brain/{conv_id}/` | 对话 journal + subagent tracking | ag-archive | daily-report |
 
 **双向链接**：`execution_record.json` 的 `source_conversation` → `brain/{conv_id}/`，journal 的 `[subagent]` tag → `~/.task-delegate/{task_id}/`
@@ -135,6 +139,7 @@ graph TB
 | [jenkins-ops](jenkins-ops/) | Jenkins CI/CD — 触发、监控、配置、排障 |
 | [infra-request](infra-request/) | 基建需求 — GitHub Issues 提交 + 验证 + Tool Integration Plan |
 | [agent-native-product](agent-native-product/) | 产品 agent 化改造 — ASSESS(A2-A6) → TRANSFORM → AUDIT，含 Agent Trial + Friction Log |
+| [concept-model-review](concept-model-review/) | 概念模型审计 — DISCOVER → EVALUATE → PATH DESIGN，评估产品竞争力 |
 
 ## 技能间协作关系
 
@@ -152,3 +157,5 @@ graph TB
 | `all skills` → `skill-creator` | 文档标准：SKILL.md (agent) + README.md (human) |
 | `agent-native-product` → `task-delegate` | Scout/Transformer/Auditor 通过 task-delegate dispatch |
 | `deep-analysis` → `agent-native-product` | system_map.md 可作为 ASSESS 输入 |
+| `concept-model-review` → `task-delegate` | Discoverer/Evaluator/PathDesigner 通过 task-delegate dispatch |
+| `concept-model-review` → `agent-native-product` | concept_map + 打开路径 feeds A1 维度 |

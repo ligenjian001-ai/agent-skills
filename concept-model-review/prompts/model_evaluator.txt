@@ -1,0 +1,126 @@
+# Task: Evaluate Conceptual Model Quality
+
+## Objective
+Evaluate the quality of this project's conceptual model across 5 dimensions.
+The key question: does this conceptual model effectively bridge the gap between
+the product's promise and its implementation?
+
+## Project
+- Path: {{PROJECT_PATH}}
+
+## Input: Concept Map
+The following concept map was produced by the Discoverer:
+
+{{CONCEPT_MAP}}
+
+## Product Promise
+The product claims:
+
+{{PRODUCT_PROMISE}}
+
+## Evaluation Dimensions
+
+### D1: Completeness — 概念是否覆盖了所有用户需求
+
+Check:
+- For each of the Top-5 user workflows, can the user express it entirely using existing concepts?
+- Are there workflows that require creating new abstractions from scratch?
+- Are there domain concepts that exist in the real world but have no representation in the model?
+
+Score:
+- 🔴 Major gaps: users must invent key abstractions themselves
+- 🟡 Partial: most needs covered, but 1-2 important concepts missing
+- 🟢 Complete: all common workflows map to existing concepts
+
+### D2: Orthogonality — 概念之间是否有不必要的耦合
+
+Check:
+- Can you change one concept without unexpectedly affecting another?
+- Are there concepts with overlapping responsibilities?
+- Do functions have single responsibility, or do they conflate concerns?
+
+Score:
+- 🔴 Tangled: changing one concept cascades to many others
+- 🟡 Partially orthogonal: some coupling exists but is manageable
+- 🟢 Orthogonal: each concept is independently variable
+
+### D3: Layering — 是否有 foundation → convenience 的自然层次
+
+Check:
+- Is there a clear foundation layer of orthogonal primitives?
+- Is there a convenience layer for common use cases?
+- How many lines of code does the simplest meaningful workflow take?
+
+Score:
+- 🔴 No layers: user must understand all internals for basic use
+- 🟡 Partial: foundation exists, but convenience layer is thin
+- 🟢 Well-layered: common tasks are 1-3 lines, details available when needed
+
+### D4: Naming — 概念命名是否准确反映职责
+
+Check:
+- Do names match behavior? (e.g., does `load()` only load, or does it also transform?)
+- Are similar things named consistently?
+- Are there misleading names? (documented as X but actually does Y)
+
+Score:
+- 🔴 Misleading: names actively cause incorrect assumptions
+- 🟡 Inconsistent: some names are clear, others are vague or overloaded
+- 🟢 Self-documenting: names are precise and consistent
+
+### D5: Promise-Implementation Gap — 概念模型是否兑现产品承诺
+
+This is the core question: does the conceptual model actually deliver on what the
+product says it does?
+
+Check:
+- Map each product promise to the concepts that should support it
+- For each mapping: does the concept fully support the promise, or is there a gap?
+- What boilerplate must users write to bridge the gap?
+
+Score:
+- 🔴 Large gap: product promises simplicity but requires deep framework knowledge
+- 🟡 Moderate gap: most promises delivered, but some require workarounds
+- 🟢 Aligned: conceptual model directly embodies product value proposition
+
+## Output
+Write to {{OUTPUT_PATH}}:
+
+```markdown
+# Conceptual Model Evaluation: {project_name}
+
+## Evaluation Matrix
+| Dimension | Score | Key Finding |
+|-----------|-------|-------------|
+| D1: Completeness | 🔴/🟡/🟢 | ... |
+| D2: Orthogonality | 🔴/🟡/🟢 | ... |
+| D3: Layering | 🔴/🟡/🟢 | ... |
+| D4: Naming | 🔴/🟡/🟢 | ... |
+| D5: Promise-Implementation Gap | 🔴/🟡/🟢 | ... |
+
+## D1: Completeness
+{detailed findings with specific examples}
+
+## D2: Orthogonality
+{detailed findings}
+
+## D3: Layering
+{detailed findings}
+
+## D4: Naming
+{detailed findings}
+
+## D5: Promise-Implementation Gap
+### Promise → Concept Mapping
+| Product Promise | Supporting Concepts | Gap Description |
+|----------------|--------------------|-----------------| 
+
+### Gap Severity Ranking
+1. {Most severe gap + why + impact on users}
+2. ...
+
+## Improvement Priorities
+| Priority | What to Fix | Expected Impact | Effort |
+|----------|------------|-----------------|--------|
+| 1 | ... | ... | ... |
+```
