@@ -47,8 +47,10 @@ playground issues close <issue_number>
 
 | Label | 项目 | 典型 issue 类型 |
 |-------|------|-----------------|
-| `project:hft_build` | HFT SDK 基建 | SDK 工具、数据管道、策略基建 |
-| `project:workstation-ops` | 工作站运维 | 环境配置、依赖管理、系统服务 |
+| `project:hft_build` | HFT SDK 基建 | C++ SDK 工具、数据管道、策略基建、OrderBook、Sim |
+| `project:workstation-ops` | 工作站运维 | 环境配置、依赖管理、系统服务、agent-pipeline |
+| `project:quant_trading` | QuantTrading SDK | Python 量化交易框架、回测引擎、策略管理、交易所对接 |
+| `project:cube_sdk` | Cube 数据 SDK | 3D numpy 数据结构、跨市场数据加载、HDF5 存储 |
 | `project:data` | 数据基建（预留） | 数据源、ETL、存储 |
 
 用户后续可能将 issue 分发到不同 repo，project label 是路由依据。

@@ -66,7 +66,7 @@ mkdir -p "${REVIEW_DIR}/discover"
 
 # AG reads prompts/concept_discoverer.txt, fills placeholders
 bash ~/agent-skills/task-delegate/scripts/task_launch.sh \
-  ${REVIEW_ID}_discoverer ${PROJECT_DIR} --backend cc
+  ${REVIEW_ID}_discoverer ${PROJECT_DIR} --backend codex
 ```
 
 **Discoverer 产出**（`concept_map.md`）：

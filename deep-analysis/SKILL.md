@@ -77,7 +77,7 @@ AG 通过多轮对话搞清楚用户的真实意图。**不套任何框架**。
 
 > [!CAUTION]
 > **HARD GATE — NON-NEGOTIABLE**
-> 调查必须通过 `task-delegate` (CC subagent) 执行。AG 不得自己做调查。
+> 调查必须通过 `task-delegate` (Codex subagent) 执行。AG 不得自己做调查。
 > AG 的角色是准备 context、明确调查任务、提取结果。
 > 如果 `task-delegate` 不可用或失败，STOP 并通知用户。
 
@@ -121,7 +121,7 @@ mkdir -p "${ANALYSIS_DIR}/investigator"
 #      Risk is information, not a reason to exclude.
 
 bash /home/lgj/agent-skills/task-delegate/scripts/task_launch.sh \
-  ${ANALYSIS_ID}_investigator ${PROJECT_DIR} --backend cc \
+  ${ANALYSIS_ID}_investigator ${PROJECT_DIR} --backend codex \
   --task-dir ${ANALYSIS_DIR}/investigator
 
 # 提取
@@ -255,5 +255,5 @@ AG 读取调查报告后综合写 `system_map.md`，但核心不是产出"共识
 | system_map 里的建议全是"安全"的 | AG 综合时丢弃了大胆选项 → 回看 investigator output，补回被移除的方案 |
 | 用户对 aspects 不满意 | Step 1 对话不够深入 → 追问用户的具体痛点和期望产出 |
 | 调查员重新读了代码（浪费 tokens） | context_bundle 不够完整 → 补充代码摘要和 API 签名 |
-| task-delegate 启动失败 | 检查 tmux session、CC 安装状态、task-dir 权限 |
+| task-delegate 启动失败 | 检查 tmux session、Codex 安装状态、task-dir 权限 |
 

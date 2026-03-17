@@ -37,7 +37,7 @@ declare -A ANALYST_TITLE=(
   [logic_analyst]="逻辑推理分析师 (Logic Analyst)"
 )
 declare -A ANALYST_ENGINE=(
-  [code_analyst]="CC / Claude"
+  [code_analyst]="Codex / OpenAI"
   [logic_analyst]="Codex / OpenAI"
 )
 

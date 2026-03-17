@@ -1,11 +1,11 @@
 ---
 name: bug-investigation
-description: "Multi-agent bug investigation — dispatch bug to CC (code analyst) and Codex (logic analyst) for independent root cause analysis, AG synthesizes the verdict."
+description: "Multi-agent bug investigation — dispatch bug to two independent Codex analysts (code + logic) for root cause analysis, AG synthesizes the verdict."
 ---
 
 # Bug Investigation Skill
 
-> **ROLE**: AG is the **调查官 (investigator)**. AG does NOT analyze the bug itself — it prepares context, dispatches CC and Codex as independent analysts, collects their reports, and synthesizes the final verdict.
+> **ROLE**: AG is the **调查官 (investigator)**. AG does NOT analyze the bug itself — it prepares context, dispatches two Codex analysts independently, collects their reports, and synthesizes the final verdict.
 
 ## When to Trigger
 
@@ -18,11 +18,11 @@ description: "Multi-agent bug investigation — dispatch bug to CC (code analyst
 
 | Analyst | Executor | Focus | Strength |
 |---------|----------|-------|----------|
-| 🔧 Code Analyst | CC (Claude) | 代码路径追踪、数据流分析 | 读文件、trace 代码、找到具体行号 |
+| 🔧 Code Analyst | Codex (OpenAI) | 代码路径追踪、数据流分析 | 深度代码分析、trace 调用链 |
 | 🧠 Logic Analyst | Codex (OpenAI) | 逻辑推理、假设推翻、边界条件 | 深度推理、找隐含假设 |
 
 > [!NOTE]
-> CC 和 Codex 独立分析，互不可见。两个 agent 的差异化靠 prompt + engine 双重保障。
+> 两个 Codex agent 独立分析，互不可见。差异化靠 prompt 保障（不同角色模板）。
 > 未来可按需加入 Gemini（多模态分析）或 DeepSeek（快速初筛）。
 
 ## Workflow
@@ -58,7 +58,7 @@ write_to_file("${INV_DIR}/bug_context.txt", ...)
 
 > [!CAUTION]
 > **Context 质量 = 分析质量。** AG 必须把相关文件内容、错误日志、复现步骤都粘贴到 bug_context.txt 里。
-> 不要只给文件路径——Codex 没有文件系统访问权。CC 有但可能定位不到正确目录。
+> 不要只给文件路径——Codex 没有文件系统访问权，所有代码必须内联到 context 中。
 
 **bug_context.txt 模板：**
 
@@ -97,7 +97,7 @@ write_to_file("${INV_DIR}/bug_context.txt", ...)
 
 ```
 
-### Phase 3: 并行分析 (AG dispatches CC + Codex)
+### Phase 3: 并行分析 (AG dispatches Codex × 2)
 
 ```bash
 # Step 3a: 生成两份分析 prompt
@@ -107,7 +107,7 @@ bash ${SKILL_DIR}/scripts/inv_prepare.sh ${INV_DIR}
 #   ${INV_DIR}/logic_analyst/prompt.txt
 
 # Step 3b: 并行启动两个分析师
-bash ${SKILL_DIR}/scripts/inv_launch.sh cc    code_analyst  ${INV_DIR}/code_analyst  ${PROJECT_DIR}
+bash ${SKILL_DIR}/scripts/inv_launch.sh codex code_analyst  ${INV_DIR}/code_analyst  ${PROJECT_DIR}
 bash ${SKILL_DIR}/scripts/inv_launch.sh codex logic_analyst ${INV_DIR}/logic_analyst ${PROJECT_DIR}
 ```
 
@@ -126,7 +126,7 @@ tmux attach -t inv-${INV_ID}-logic_analyst
 
 | Analyst | Timeout | Action |
 |---------|---------|--------|
-| CC (Code Analyst) | 10 min | Ctrl+C → 部分结果可用 |
+| Codex (Code Analyst) | 5 min | Ctrl+C → 部分结果可用 |
 | Codex (Logic Analyst) | 5 min | Ctrl+C → 部分结果可用 |
 
 ### Phase 4: 综合判定 (AG — MOST VALUABLE STEP)
@@ -148,7 +148,7 @@ AG 读取两份分析后，写出综合判定（直接写入 `${INV_DIR}/verdict
 # 综合判定
 
 ## 一致结论
-{CC 和 Codex 都指向的根因}
+{两个分析师都指向的根因}
 
 ## 分歧点
 {两方不同意的地方 — 这里通常隐藏真正的答案}
@@ -162,7 +162,7 @@ AG 读取两份分析后，写出综合判定（直接写入 `${INV_DIR}/verdict
 {具体修哪里、改什么}
 
 ## （可选）反驳轮
-{如果 AG 犹豫不决，可以把 CC 的分析给 Codex 看、Codex 的分析给 CC 看，让他们交叉挑战}
+{如果 AG 犹豫不决，可以把代码分析师的分析给逻辑分析师看、逻辑分析师的分析给代码分析师看，让他们交叉挑战}
 ```
 
 > [!IMPORTANT]
@@ -175,10 +175,10 @@ AG 在综合判定后**询问用户**是否需要反驳轮：
 
 ```markdown
 ⚔️ 两位分析师有分歧：
-- CC 认为: {CC 的结论}
-- Codex 认为: {Codex 的结论}
+- 代码分析师认为: {代码分析师的结论}
+- 逻辑分析师认为: {逻辑分析师的结论}
 
-是否要让它们交叉审查？（把 CC 的分析给 Codex、Codex 的分析给 CC，让它们互相挑战）
+是否要让它们交叉审查？（把代码分析师的分析给逻辑分析师、逻辑分析师的分析给代码分析师，让它们互相挑战）
 ```
 
 如果用户同意：
@@ -187,13 +187,13 @@ AG 在综合判定后**询问用户**是否需要反驳轮：
 # 准备反驳轮
 bash ${SKILL_DIR}/scripts/inv_prepare.sh ${INV_DIR} --rebuttal
 # 启动反驳轮（同 Phase 3）
-bash ${SKILL_DIR}/scripts/inv_launch.sh cc    code_analyst  ${INV_DIR}/rebuttal/code_analyst  ${PROJECT_DIR}
+bash ${SKILL_DIR}/scripts/inv_launch.sh codex code_analyst  ${INV_DIR}/rebuttal/code_analyst  ${PROJECT_DIR}
 bash ${SKILL_DIR}/scripts/inv_launch.sh codex logic_analyst ${INV_DIR}/rebuttal/logic_analyst ${PROJECT_DIR}
 ```
 
 ### Phase 5: 修复委派 (Optional)
 
-如果根因明确，AG 可直接用 `task-delegate` 委派 CC 修复：
+如果根因明确，AG 可直接用 `task-delegate` 委派 Codex 修复：
 
 ```bash
 # 使用 task-delegate skill 委派修复
@@ -224,7 +224,7 @@ bash ${SKILL_DIR}/scripts/inv_launch.sh codex logic_analyst ${INV_DIR}/rebuttal/
 
 1. **AG 不做分析** — AG 只负责收集 context、dispatch、综合判定。不要在 dispatch 前就给结论。
 2. **Context 必须包含代码内容** — 不能只给文件路径，必须粘贴关键代码到 bug_context.txt。
-3. **两路独立** — CC 和 Codex 看到相同的 bug_context.txt，但看不到对方的分析。
+3. **两路独立** — 两个 Codex agent 看到相同的 bug_context.txt，但看不到对方的分析。
 4. **关注分歧** — 综合判定时，分歧点比一致点更有价值。
 5. **反驳轮由用户决定** — AG 建议但不自动启动反驳轮。
 
@@ -237,7 +237,7 @@ bash ${SKILL_DIR}/scripts/inv_launch.sh codex logic_analyst ${INV_DIR}/rebuttal/
 ❌ bug_context.txt 只写 "看一下 xyz.cpp 的问题"
    → 必须包含完整的现象描述、错误日志、相关代码片段
 
-❌ 把 CC 的分析结果放进 Codex 的初始 prompt（破坏独立性）
+❌ 把一个分析师的结果放进另一个的初始 prompt（破坏独立性）
    → 初始轮必须独立。交叉审查只在反驳轮进行
 
 ❌ 忽略两方的分歧直接选一个
@@ -252,7 +252,7 @@ bash ${SKILL_DIR}/scripts/inv_launch.sh codex logic_analyst ${INV_DIR}/rebuttal/
 | Problem | Fix |
 |---------|-----|
 | Codex 超时或 401 | 检查 Codex 登录状态，或改用 Gemini 替代 |
-| CC 分析方向偏离 | bug_context.txt 太模糊 — 补充更多代码和日志 |
+| Codex 分析方向偏离 | bug_context.txt 太模糊 — 补充更多代码和日志 |
 | 两方结论完全一致 | 好事！高信心根因。但仍需 AG 验证逻辑链路 |
 | 两方结论完全矛盾 | 启动反驳轮让它们交叉挑战，或 AG 做更深入 code review |
 | 分析师没有输出 output.md | 检查 live.log，可能需要手动从 raw output 提取 |

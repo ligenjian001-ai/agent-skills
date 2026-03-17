@@ -120,6 +120,11 @@ Then capture-pane periodically. RUNNING state with partial output is expected.
 
 ❌ WRONG: Bypassing tmux during error recovery / fallbacks
     → ALL commands go through tmux, no exceptions
+
+❌ CRITICAL: Retrying a side-effecting command without verifying prior attempt
+    playground issues post "..."  → background → retry → duplicate issue
+    git push / gh pr create / curl -X POST / deploy script
+    → ALWAYS verify first (see Side-Effect Safety below)
 ```
 
 ## Background Recovery
@@ -136,6 +141,41 @@ If `run_command` returns a "Background command ID":
 ✅ Background with Exit code 0 → just proceed, don't retry
 ❌ WRONG: Background with Exit code 0 → "Got background, let me retry"
 ```
+
+## Side-Effect Safety
+
+> [!CAUTION]
+> **副作用命令永远不盲目重试。** `run_command` 返回 background 不代表命令失败。
+> 盲目重试 = 重复创建 issue、重复 push、重复部署。
+
+**副作用命令识别**：任何会改变外部状态的命令 — `create`、`post`、`push`、`deploy`、`delete`、`curl -X POST/PUT/DELETE`、API 写操作。
+
+**核心规则**：
+
+1. 发送副作用命令后，`run_command` 返回 background → **不重试**
+2. 用**只读命令**验证前一次是否已生效
+3. 根据验证结果决定下一步
+
+**标准流程**：
+
+```
+① 执行副作用命令
+   playground issues post "..." > /tmp/result.txt 2>&1
+
+② run_command 返回 background / 状态不确定
+   → 不重试！
+
+③ 用只读命令验证
+   playground issues list --limit 3    ← 确认 issue 是否已存在
+   git log --oneline -3                ← 确认 push 是否已到达
+   curl -s GET /api/resource            ← 确认资源是否已创建
+
+④ 根据验证结果
+   已生效 → 继续下一步
+   未生效 → 此时才可以重试
+```
+
+**判断基准**：如果命令执行两次会产生不同于执行一次的结果（多一条 issue、多一次 push） → 这就是副作用命令，必须走上述流程。
 
 ## run_command Hang Recovery
 

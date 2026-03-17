@@ -50,7 +50,7 @@ declare -A CROSS_REVIEW=(
   [logic_analyst]="code_analyst"
 )
 declare -A ANALYST_LABEL=(
-  [code_analyst]="代码分析师 (CC)"
+  [code_analyst]="代码分析师 (Codex)"
   [logic_analyst]="逻辑推理分析师 (Codex)"
 )
 

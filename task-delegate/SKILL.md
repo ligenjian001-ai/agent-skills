@@ -5,10 +5,47 @@ description: Delegate tasks to any backend (CC, Codex, Gemini, DeepSeek). AG act
 
 # Task Delegate Skill
 
+## Environment Routing（环境分流）
+
+> [!IMPORTANT]
+> **本 skill 根据运行环境自动选择执行路径。**
+
+| 环境 | 检测方式 | Claude 后端委派 | 非 Claude 后端 |
+|------|---------|----------------|---------------|
+| **CC（Claude Code）** | 有原生 `Agent` 工具 | ➡️ **原生 Agent 工具**（见下方 CC-Native 章节） | ➡️ tmux 流程（Step 1-5） |
+| **AG（Antigravity）** | 无原生 `Agent` 工具 | ➡️ tmux 流程（Step 1-5） | ➡️ tmux 流程（Step 1-5） |
+
+### CC-Native 路径（仅 Claude Code 环境）
+
+当你是 Claude Code 且任务委派目标是 Claude 模型时，**直接使用原生 Agent 工具**：
+
+```
+Agent(
+  subagent_type="general-purpose",   # 或 "Explore"（只读研究）/ "Plan"（方案设计）
+  prompt="...",                       # 传递 WHAT + WHERE，不传递 HOW（同下方 Step 1 原则）
+  model="sonnet",                    # 可选：sonnet（默认）、opus、haiku
+  isolation="worktree",              # 可选：需要隔离时使用
+  run_in_background=true,            # 可选：长任务异步执行
+)
+```
+
+**CC-Native 路径遵循的原则：**
+- Prompt 编写原则同 Step 1（传递 WHAT + WHERE，不传递 HOW）
+- Scout-Before-Execute 模式 → 先用 `subagent_type="Explore"` 侦察，再用 `"general-purpose"` 执行
+- 验证原则同 Step 4（独立验证 executor 产出）
+- **不需要**：写 prompt.txt、tmux session、polling loop、解析 stream-json
+
+**何时仍走 tmux 流程：**
+- 用户明确指定非 Claude 后端（"用 Codex"、"交给 Gemini"、"DeepSeek"）
+- Pipeline/headless 场景（issue_watcher 等自动化调用）
+- 需要 execution_record 持久化记录或 Langfuse tracing
+
+---
+
 > **AG 的默认身份是 orchestrator（编排者），不是 coder。**
 > 遇到编码任务，AG 的第一反应是**委派**，不是自己写。
 
-## When to Trigger
+## When to Trigger（AG + tmux 流程）
 
 **默认行为 = 委派。** 满足任意一条即应委派：
 
@@ -200,13 +237,45 @@ bash /home/lgj/agent-skills/task-delegate/scripts/task_extract.sh {task_id} \
 # Check status
 cat ~/.task-delegate/{task_id}/execution_record.json
 
-# Review changes
+# Review changes (READ-ONLY — 只看，绝不改)
 cd {project_dir} && git diff --stat
 
 # Run self-test from prompt.txt
 ```
 
 AG 必须**读取并理解** executor 产出，独立验证，然后向用户汇报：产出摘要、验证结果、发现的问题。
+
+> [!CAUTION]
+> **禁止破坏性 Git 操作 — HARD RULE**
+>
+> AG 在验证阶段（以及任何阶段）**绝对禁止**执行以下命令：
+>
+> - `git checkout -- {files}` — 会删除未提交修改
+> - `git restore {files}` — 同上
+> - `git reset --hard` — 会丢失所有未提交修改
+> - `git clean -fd` — 会删除未跟踪文件
+> - `git stash` — 会隐藏他人的修改
+>
+> `git diff --stat` 中看到的**不属于当前任务的修改**，是**其他并行任务或用户**的工作产出，**不是需要清理的垃圾**。AG 无权判断这些修改是否"相关"，更无权删除。
+>
+> **如果 AG 认为有文件需要 revert，必须向用户报告并等待指示。**
+
+### Verification Anti-Patterns ⛔
+
+```
+❌ 看到 git diff 中有"不相关"的修改就 git checkout 掉
+   → 那些修改属于其他任务，AG 无权判断和删除
+
+❌ 用 git restore / git reset 来"清理"工作区
+   → 可能抹掉其他 agent 数小时的工作
+
+❌ 假设 git diff 中的所有修改都是当前任务的产出
+   → 多任务并行时，工作区有多个来源的修改
+
+✅ 只用 git diff --stat 查看变更概况
+✅ 向用户汇报看到的所有修改，让用户决定处理方式
+✅ 如果需要区分当前任务的修改，让用户确认
+```
 
 ---
 

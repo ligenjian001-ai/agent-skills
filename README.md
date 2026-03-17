@@ -56,8 +56,10 @@ graph TB
 
     subgraph "🛠️ 功能扩展"
         BU["browser-use"] & JK["jenkins-ops"] & IR["infra-request"]
+        II["infra-intake\nIssue 处理 + CC 设计对话"]
         ANP["agent-native-product\n产品 agent 化改造"]
         CMR["concept-model-review\n概念模型审计"]
+        JS["jupyter-session\n持久 Jupyter 会话"]
     end
 
     subgraph "📦 基础设施"
@@ -89,7 +91,8 @@ graph TB
     DA -->|分析| IPC4
     SD -->|设计| IPC5
     DR -.->|读取| IPC1 & IPC2 & IPC3
-    AG --> BU & JK & IR & ANP & CMR
+    AG --> BU & JK & IR & ANP & CMR & II
+    II -->|"CC Design Dialogue"| TD
     ANP -->|wrapper| TD
     CMR -->|wrapper| TD
     CMR -->|concept_map| ANP
@@ -145,8 +148,10 @@ graph TB
 | [browser-use](browser-use/) | 浏览器自动化 — browser-use + Gemini Flash，比 AG 内置快 2-9x |
 | [jenkins-ops](jenkins-ops/) | Jenkins CI/CD — 触发、监控、配置、排障 |
 | [infra-request](infra-request/) | 基建需求 — GitHub Issues 提交 + 验证 + Tool Integration Plan |
+| [infra-intake](infra-intake/) | 基建实现 — AG 确认问题 + CC Design Dialogue 多轮协作 + 独立验证 |
 | [agent-native-product](agent-native-product/) | 产品 agent 化改造 — ASSESS(A2-A6) → TRANSFORM → AUDIT，含 Agent Trial + Friction Log |
 | [concept-model-review](concept-model-review/) | 概念模型审计 — DISCOVER → EVALUATE → PATH DESIGN，评估产品竞争力 |
+| [jupyter-session](jupyter-session/) | 持久 Jupyter 会话 — kernel 管理 + 代码执行 + 输出截断 + 图片保存，直连 REST API |
 
 ## 技能间协作关系
 
@@ -158,8 +163,10 @@ graph TB
 | `system-design` → `task-delegate` | Architect/Realist/Explorer agent 通过 task-delegate dispatch |
 | `deep-analysis` → `system-design` | system_map.md 作为 system-design 的输入（可选、可组合） |
 | `system-design` → `infra-request` | Blueprint 的 infra_requests/ 可直接提交 GitHub Issues |
+| `infra-intake` → `task-delegate` | CC Design Dialogue + Baseline/Verify 通过 task-delegate dispatch |
 | `ag-archive` → `task-delegate` | journal `[subagent]` tag 通过 task_id 关联执行记录 |
 | `daily-report` → `ag-archive` + `task-delegate` + `panel-discussion` | 扫描 IPC 目录生成日报 |
+| `jupyter-session` → `tmux-protocol` | jupyter_api.py 通过 tmux 调用 |
 | `all terminal skills` → `tmux-protocol` | 所有涉及终端的操作必须遵循 tmux 协议 |
 | `all skills` → `skill-creator` | 文档标准：SKILL.md (agent) + README.md (human) |
 | `agent-native-product` → `task-delegate` | Scout/Transformer/Auditor 通过 task-delegate dispatch |

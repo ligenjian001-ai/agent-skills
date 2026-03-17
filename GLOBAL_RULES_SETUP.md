@@ -75,6 +75,26 @@ ag-archive skill 需要在每次对话开始时自动创建 journal：
 
 **为什么需要**：没有这条规则，AG 会倾向于自己编码而不是委派给 CC/Codex 等后端，导致上下文被污染、任务链路无法延长。
 
+### 5. Git 安全 — 禁止破坏性操作
+
+AG 在多任务并行场景下会误判其他任务的未提交修改为"不相关文件"并 revert，导致数据丢失：
+
+```markdown
+## 16. GIT SAFETY — NO DESTRUCTIVE OPERATIONS
+
+AG **绝对禁止**未经用户批准执行以下命令：
+
+- `git checkout -- {files}`
+- `git restore {files}`
+- `git reset --hard`
+- `git clean -fd`
+
+`git diff` 中的修改可能属于其他并行任务，AG 无权判断和删除。
+如需 revert 文件，必须向用户报告并等待指示。
+```
+
+**为什么需要**：多 agent 并行工作时，AG 在验证步骤看到 `git diff` 包含"不属于当前任务的修改"，会擅自 `git checkout --` 删除，导致其他 agent 数小时的工作丢失。
+
 ## 建议配置的规则
 
 以下规则非强制但强烈建议，能显著改善 skill 执行效果：

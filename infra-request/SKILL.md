@@ -34,14 +34,18 @@ playground issues close <N>
 
 | Label | 项目 | 典型 issue 类型 |
 |-------|------|-----------------|
-| `project:hft_build` | HFT SDK 基建 | SDK 工具、数据管道、策略基建 |
-| `project:workstation-ops` | 工作站运维 | 环境配置、依赖管理、系统服务 |
+| `project:hft_build` | HFT SDK 基建 | C++ SDK 工具、数据管道、策略基建、OrderBook、Sim |
+| `project:workstation-ops` | 工作站运维 | 环境配置、依赖管理、系统服务、agent-pipeline |
+| `project:quant_trading` | QuantTrading SDK | Python 量化交易框架、回测引擎、策略管理、交易所对接 |
+| `project:cube_sdk` | Cube 数据 SDK | 3D numpy 数据结构、跨市场数据加载、HDF5 存储 |
 | `project:data` | 数据基建（预留） | 数据源、ETL、存储 |
 
 **AG 判断规则**：根据 issue 内容判断所属项目，不需要用户显式指定。判断依据：
 
-- 涉及 SDK API / 策略工具 / playground CLI → `project:hft_build`
-- 涉及机器环境 / 依赖安装 / 系统配置 / 服务部署 → `project:workstation-ops`
+- 涉及 C++ SDK API / 策略工具 / playground CLI / OrderBook / sim_match → `project:hft_build`
+- 涉及机器环境 / 依赖安装 / 系统配置 / 服务部署 / agent-pipeline / Jenkins → `project:workstation-ops`
+- 涉及 Python 回测 / 策略管理 / online_trade_engine / OpenClaw / 交易所对接 → `project:quant_trading`
+- 涉及 Cube / 3D 数据 / HDF5 / 跨资产加载 / CryptoCube / K线压缩 → `project:cube_sdk`
 - 不确定时，标注为用户最近工作的项目
 
 ## ⚠️ Idempotency Guard (MANDATORY for Issue Creation)
@@ -49,6 +53,7 @@ playground issues close <N>
 > [!CAUTION]
 > `command_status` is unreliable for `playground issues` commands (known platform bug).
 > NEVER blindly retry issue creation.
+> General principle: see **Side-Effect Safety** in `tmux-protocol/SKILL.md`.
 
 ### Pre-flight Check
 
